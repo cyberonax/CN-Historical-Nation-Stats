@@ -153,7 +153,7 @@ def altair_individual_metric_chart(df, metric, title):
 def main():
     st.title("Cyber Nations | Alliance Stats Timeline Tracker")
     st.markdown("""
-        This dashboard displays nation statistics over time.
+        This dashboard displays alliance and nation statistics over time.
         Use the tabs below to switch between aggregated alliance charts and individual nation metrics.
     """)
     
