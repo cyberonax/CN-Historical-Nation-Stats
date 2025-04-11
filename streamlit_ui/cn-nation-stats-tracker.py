@@ -124,7 +124,8 @@ def main():
     
     # Sidebar Filters: Filter by alliance and date range.
     st.sidebar.header("Filters")
-    alliance_filter = st.sidebar.text_input("Filter Nations by Alliance", value="")
+    # Set default text to "Freehold of the Wolves"
+    alliance_filter = st.sidebar.text_input("Filter Nations by Alliance", value="Freehold of the Wolves")
     if alliance_filter:
         df = df[df['Alliance'].str.contains(alliance_filter, case=False, na=False)]
     
@@ -196,11 +197,24 @@ def main():
             pivot_empty = agg_df.pivot(index='date', columns='Alliance', values='Empty Trade Slots')
             st.line_chart(pivot_empty)
     
-    # 9. Nation Activity Distribution (if the "Activity" column exists)
+    # 9. Nation Activity Distribution with Recoded Values
     if 'Activity' in df.columns:
         with st.expander("Nation Activity Distribution Over Time"):
-            activity_df = df.groupby(['date', 'Activity']).size().unstack(fill_value=0)
-            st.line_chart(activity_df)
+            # Map the Activity values to numeric scores
+            activity_mapping = {
+                "Active in the Last 3 Days": 3,
+                "Active This Week": 7,
+                "Active Last Week": 14,
+                "Active Three Weeks Ago": 21,
+                "Active More Than Three Weeks Ago": 28
+            }
+            df['activity_score'] = df['Activity'].map(activity_mapping)
+            # Drop any rows that didn't match the mapping
+            df_activity = df.dropna(subset=['activity_score'])
+            # Group by date and compute the average activity score (or you can compute sums/counts as needed)
+            activity_score_df = df_activity.groupby('date')['activity_score'].mean().reset_index()
+            activity_score_df = activity_score_df.set_index('date')
+            st.line_chart(activity_score_df)
 
 if __name__ == "__main__":
     main()
