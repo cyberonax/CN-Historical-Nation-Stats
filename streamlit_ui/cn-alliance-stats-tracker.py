@@ -121,7 +121,7 @@ def altair_line_chart_from_pivot(pivot_df, y_field):
         x=alt.X("date:T", title=""),
         y=alt.Y(f"{y_field}:Q", title=""),
         color=alt.Color("Alliance:N", scale=color_scale, legend=alt.Legend(title="Alliance")),
-        tooltip=["date:T", "Alliance", f"{y_field}:Q"]
+        tooltip=["date:T", "Alliance", alt.Tooltip(f"{y_field}:Q", title=y_field)]
     ).properties(
         width=700,
         height=400
@@ -131,14 +131,15 @@ def altair_line_chart_from_pivot(pivot_df, y_field):
 def altair_individual_metric_chart(df, metric, title):
     """
     Creates an Altair line chart from raw nation-level data for a given metric.
-    Each line represents a Nation (by Nation ID). The data frame is expected to have
-    a date column.
+    Each line represents a Nation (displayed with its Ruler Name instead of Nation ID).
+    The data frame is expected to have a date column and a 'Ruler Name' column.
     """
     chart = alt.Chart(df).mark_line().encode(
         x=alt.X("date:T", title="Date"),
         y=alt.Y(f"{metric}:Q", title=title),
-        color=alt.Color("Nation ID:N", legend=alt.Legend(title="Nation ID")),
-        tooltip=["date:T", "Nation ID", alt.Tooltip(f"{metric}:Q", title=title)]
+        # Use Ruler Name for the line encoding.
+        color=alt.Color("Ruler Name:N", legend=alt.Legend(title="Ruler Name")),
+        tooltip=["date:T", "Ruler Name", alt.Tooltip(f"{metric}:Q", title=title)]
     ).properties(
         width=700,
         height=400
@@ -364,8 +365,16 @@ def main():
         default_ind = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
         selected_alliance_ind = st.sidebar.selectbox("Select Alliance for Nation Metrics", options=alliances, index=default_ind, key="nation")
         
+        # New sidebar multiselect widget to filter by Nation ID.
+        # Default selection is empty which means show all nations.
+        nation_ids = sorted(df_raw["Nation ID"].dropna().unique())
+        selected_nation_ids = st.sidebar.multiselect("Filter by Nation ID", options=nation_ids, default=[], key="filter_nation_id")
+        
         # Filter raw data for the selected alliance.
         df_indiv = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
+        # If any Nation ID is selected, further filter the data.
+        if selected_nation_ids:
+            df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
         
         # (Optional) Apply a date range filter for individual nation charts.
         min_date_ind = df_indiv['date'].min()
@@ -378,7 +387,7 @@ def main():
         with st.expander("Show Raw Nation Data"):
             st.dataframe(df_indiv)
         
-        st.markdown(f"### Charts for alliance: {selected_alliance_ind}")
+        st.markdown(f"### Charts for Alliance: {selected_alliance_ind}")
         
         # Now include charts for important metrics in the original order:
         
