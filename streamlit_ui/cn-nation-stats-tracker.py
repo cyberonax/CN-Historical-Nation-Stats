@@ -88,13 +88,13 @@ def aggregate_by_alliance(df):
     
     agg_dict = {
         'Nation ID': 'count',  # This will be renamed to nation_count.
-        'Empty Trade Slots': 'sum'
+        'Empty Trade Slots': 'sum',
         'Attacking Casualties': 'sum',
         'Defensive Casualties': 'sum',
         'Infra': 'sum',
         'Tech': 'sum',
         'Base Land': 'sum',
-        'Strength': 'sum',
+        'Strength': 'sum'
     }
     
     grouped = df.groupby(['snapshot_date', 'Alliance']).agg(agg_dict).reset_index()
