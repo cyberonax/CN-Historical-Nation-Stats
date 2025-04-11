@@ -192,7 +192,7 @@ def main():
 
     # Nation Activity Distribution: Average Alliance Activity Over Time (if Activity column exists)
     if 'Activity' in df.columns:
-        with st.expander("Average Alliance Activity Over Time (Days)"):
+        with st.expander("Average Alliance Inactivity Over Time (Days)"):
             activity_mapping = {
                 "Active in the Last 3 Days": 3,
                 "Active This Week": 7,
