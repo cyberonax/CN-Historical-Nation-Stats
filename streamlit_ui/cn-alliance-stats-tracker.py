@@ -484,7 +484,12 @@ def main():
         
         # (b) Empty Trade Slots Over Time
         with st.expander("Empty Trade Slots Over Time"):
-            chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Empty Slots Count']), "Empty Slots Count", "Empty Trade Slots", show_ruler_on_hover=show_hover)
+            chart = altair_individual_metric_chart(
+                df_indiv.dropna(subset=['Empty Slots Count']),
+                "Empty Slots Count",
+                "Empty Trade Slots",
+                show_ruler_on_hover=show_hover
+            )
             st.altair_chart(chart, use_container_width=True)
             
             # Compute each nation's average empty trade slots across snapshots.
@@ -495,8 +500,27 @@ def main():
                 .reset_index()
                 .rename(columns={"Empty Slots Count": "All Time Average Empty Trade Slots"})
             )
-            st.markdown("#### All Tme Average Empty Trade Slots per Nation")
+            st.markdown("#### All Time Average Empty Trade Slots per Nation")
             st.dataframe(avg_empty)
+            
+            # Compute each nation's average activity score (inactivity).
+            avg_inactivity = (
+                df_indiv.dropna(subset=['activity_score'])
+                .groupby(["Nation ID", "Ruler Name"])["activity_score"]
+                .mean()
+                .reset_index()
+                .rename(columns={"activity_score": "All Time Average Inactivity"})
+            )
+            
+            # Merge the two averages on Nation ID and Ruler Name.
+            avg_ratio = pd.merge(avg_empty, avg_inactivity, on=["Nation ID", "Ruler Name"], how="inner")
+            
+            # Compute the Empty-to-Inactivity Ratio.
+            # Replace 0 inactivity with None to avoid division by zero.
+            avg_ratio["Empty-to-Inactivity Ratio"] = avg_ratio["All Time Average Empty Trade Slots"] / avg_ratio["All Time Average Inactivity"].replace(0, None)
+            
+            st.markdown("#### Empty Slots-to-Inactivity Ratio per Nation")
+            st.dataframe(avg_ratio)
         
         # (c) Technology Over Time
         if 'Technology' in df_indiv.columns:
