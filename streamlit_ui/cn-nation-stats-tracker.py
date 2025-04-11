@@ -82,9 +82,9 @@ def aggregate_by_alliance(df):
       - Other metrics (Empty Trade Slots, Attacking Casualties, Defensive Casualties,
         Infrastructure, Technology, Base Land, and Strength) are summed.
       
-    In this aggregated DataFrame, the summed 'Strength' represents the total strength.
+    In this aggregated DataFrame, the summed 'Strength' represents the Total Strength.
     """
-    # Define the desired numeric columns (ensure names match the raw data)
+    # Use the column names as they appear in the raw data.
     numeric_cols = ['Empty Trade Slots', 'Attacking Casualties', 'Defensive Casualties',
                     'Infrastructure', 'Technology', 'Base Land', 'Strength']
     for col in numeric_cols:
@@ -92,7 +92,7 @@ def aggregate_by_alliance(df):
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
     agg_dict = {
-        'Nation ID': 'count',  # Will be renamed to nation_count.
+        'Nation ID': 'count',  # This will be renamed to nation_count.
         'Empty Trade Slots': 'sum',
         'Attacking Casualties': 'sum',
         'Defensive Casualties': 'sum',
@@ -110,6 +110,7 @@ def aggregate_totals(df, col):
     """
     Groups the raw data by snapshot_date and Alliance and returns a pivoted DataFrame 
     with the SUM for the specified column.
+    
     For example, for 'Strength', this sums the strength of each nation to give Total Strength.
     """
     grouped = df.groupby(['snapshot_date', 'Alliance'])[col].sum().reset_index()
@@ -136,7 +137,7 @@ def main():
     # Sidebar Filters: Create a dropdown with available alliances.
     st.sidebar.header("Filters")
     alliances = sorted(df['Alliance'].dropna().unique())
-    # Set default to "Freehold of The Wolves" if available
+    # Set default to "Freehold of The Wolves" if available.
     default_index = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
     selected_alliance = st.sidebar.selectbox("Select Alliance", options=alliances, index=default_index)
     df = df[df['Alliance'] == selected_alliance]
@@ -157,7 +158,7 @@ def main():
     agg_df = aggregate_by_alliance(df)
     agg_df['date'] = agg_df['snapshot_date'].dt.date
     
-    # Compute averages by dividing each total by the number of nations.
+    # Compute averages by dividing totals by the number of nations.
     agg_df['avg_attacking_casualties'] = agg_df['Attacking Casualties'] / agg_df['nation_count']
     agg_df['avg_defensive_casualties'] = agg_df['Defensive Casualties'] / agg_df['nation_count']
     agg_df['avg_infrastructure'] = agg_df['Infrastructure'] / agg_df['nation_count']
@@ -170,29 +171,29 @@ def main():
     
     # Collapsible charts for different metrics:
     
-    # 1. Nation Count by Alliance
+    # 1. Nation Count by Alliance Over Time
     with st.expander("Nation Count by Alliance Over Time"):
         pivot_count = agg_df.pivot(index='date', columns='Alliance', values='nation_count')
         st.line_chart(pivot_count)
     
-    # 2. Total Attacking Casualties by Alliance
+    # 2. Total Attacking Casualties by Alliance Over Time
     if 'Attacking Casualties' in agg_df.columns:
         with st.expander("Total Attacking Casualties by Alliance Over Time"):
             pivot_attack = agg_df.pivot(index='date', columns='Alliance', values='Attacking Casualties')
             st.line_chart(pivot_attack)
     
-    # 3. Average Attacking Casualties by Alliance
+    # 3. Average Attacking Casualties by Alliance Over Time
     with st.expander("Average Attacking Casualties by Alliance Over Time"):
         pivot_avg_attack = agg_df.pivot(index='date', columns='Alliance', values='avg_attacking_casualties')
         st.line_chart(pivot_avg_attack)
     
-    # 4. Total Defensive Casualties by Alliance
+    # 4. Total Defensive Casualties by Alliance Over Time
     if 'Defensive Casualties' in agg_df.columns:
         with st.expander("Total Defensive Casualties by Alliance Over Time"):
             pivot_defense = agg_df.pivot(index='date', columns='Alliance', values='Defensive Casualties')
             st.line_chart(pivot_defense)
     
-    # 5. Average Defensive Casualties by Alliance
+    # 5. Average Defensive Casualties by Alliance Over Time
     with st.expander("Average Defensive Casualties by Alliance Over Time"):
         pivot_avg_defense = agg_df.pivot(index='date', columns='Alliance', values='avg_defensive_casualties')
         st.line_chart(pivot_avg_defense)
@@ -244,7 +245,6 @@ def main():
     # 14. Nation Activity Distribution: Average Activity Score Over Time
     if 'Activity' in df.columns:
         with st.expander("Average Alliance Activity Over Time (Days)"):
-
             activity_mapping = {
                 "Active in the Last 3 Days": 3,
                 "Active This Week": 7,
