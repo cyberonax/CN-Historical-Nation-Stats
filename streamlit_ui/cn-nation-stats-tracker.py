@@ -166,6 +166,11 @@ def main():
     
     with st.expander("Show Raw Data"):
         st.dataframe(df.head(2000))
+
+    st.write("Raw Technology values:", df['Technology'].head(10))
+    st.write("Number of rows in loaded data:", len(df))
+    st.write("Unique snapshot dates:", df['snapshot_date'].unique())
+
     
     # Aggregate data by alliance (using sum for totals)
     agg_df = aggregate_by_alliance(df)
