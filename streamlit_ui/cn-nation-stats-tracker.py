@@ -125,15 +125,14 @@ def get_current_resources(row, resource_cols):
     resources = sorted([str(x).strip() for x in row[resource_cols] if pd.notnull(x) and str(x).strip() != ''])
     return ", ".join(resources)
 
-def altair_line_chart_from_pivot(pivot_df, y_field, chart_title=""):
+def altair_line_chart_from_pivot(pivot_df, y_field):
     """
     Creates an Altair line chart from a pivot DataFrame.
     The pivot DataFrame is expected to have its index as dates and columns as Alliance names.
-    The y_field parameter is used for the y-axis label.
-    The color encoding will force:
-      - CLAWS to red
-      - Freehold of The Wolves to yellow
-      - NATO to blue
+    Axis labels and chart title are removed. The color encoding will force:
+      - CLAWS to red,
+      - Freehold of The Wolves to yellow,
+      - NATO to blue.
     """
     # Reset index and melt the dataframe to long format.
     df_long = pivot_df.reset_index().melt(id_vars="date", var_name="Alliance", value_name=y_field)
@@ -142,9 +141,9 @@ def altair_line_chart_from_pivot(pivot_df, y_field, chart_title=""):
         domain=["CLAWS", "Freehold of The Wolves", "NATO"],
         range=["red", "yellow", "blue"]
     )
-    chart = alt.Chart(df_long, title=chart_title).mark_line().encode(
-        x=alt.X("date:T", title="Date"),
-        y=alt.Y(f"{y_field}:Q", title=y_field),
+    chart = alt.Chart(df_long).mark_line().encode(
+        x=alt.X("date:T", title=""),  # Remove x-axis title
+        y=alt.Y(f"{y_field}:Q", title=""),  # Remove y-axis title
         color=alt.Color("Alliance:N", scale=color_scale, legend=alt.Legend(title="Alliance")),
         tooltip=["date:T", "Alliance", f"{y_field}:Q"]
     ).properties(
@@ -223,7 +222,7 @@ def main():
     # 1. Nation Count by Alliance Over Time
     with st.expander("Nation Count by Alliance Over Time"):
         pivot_count = agg_df.pivot(index='date', columns='Alliance', values='nation_count')
-        chart = altair_line_chart_from_pivot(pivot_count, "nation_count", "Nation Count by Alliance Over Time")
+        chart = altair_line_chart_from_pivot(pivot_count, "nation_count")
         st.altair_chart(chart, use_container_width=True)
     
     # 2. Nation Activity Distribution (if Activity exists)
@@ -239,20 +238,19 @@ def main():
             df['activity_score'] = df['Activity'].map(activity_mapping)
             df_activity = df.dropna(subset=['activity_score'])
             activity_grouped = df_activity.groupby('date')['activity_score'].mean().reset_index()
-            activity_chart = alt.Chart(activity_grouped, title="Average Alliance Inactivity Over Time (Days)").mark_line().encode(
-                x=alt.X("date:T", title="Date"),
-                y=alt.Y("activity_score:Q", title="Average Activity Score"),
+            activity_chart = alt.Chart(activity_grouped).mark_line().encode(
+                x=alt.X("date:T", title=""),
+                y=alt.Y("activity_score:Q", title=""),
                 tooltip=["date:T", "activity_score:Q"]
             ).properties(width=700, height=400).interactive()
             st.altair_chart(activity_chart, use_container_width=True)
-            st.caption("Lower scores indicate more recent activity.")
     
     # 3. Total Empty Trade Slots by Alliance Over Time
     with st.expander("Total Empty Trade Slots by Alliance Over Time"):
         empty_agg = df.groupby(['snapshot_date', 'Alliance'])['Empty Slots Count'].sum().reset_index()
         empty_agg['date'] = empty_agg['snapshot_date'].dt.date
         pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
-        chart = altair_line_chart_from_pivot(pivot_empty_total, "Empty Slots Count", "Total Empty Trade Slots by Alliance Over Time")
+        chart = altair_line_chart_from_pivot(pivot_empty_total, "Empty Slots Count")
         st.altair_chart(chart, use_container_width=True)
     
     # 4. % of Nations with Empty Trade Slots Over Time
@@ -264,85 +262,85 @@ def main():
         ratio_df['percent_empty'] = (ratio_df['empty_nations'] / ratio_df['total_nations']) * 100
         ratio_df['date'] = ratio_df['snapshot_date'].dt.date
         pivot_ratio = ratio_df.pivot(index='date', columns='Alliance', values='percent_empty')
-        chart = altair_line_chart_from_pivot(pivot_ratio, "percent_empty", "% of Nations with Empty Trade Slots Over Time")
+        chart = altair_line_chart_from_pivot(pivot_ratio, "percent_empty")
         st.altair_chart(chart, use_container_width=True)
     
     # 5. Total Technology by Alliance Over Time
     if 'Technology' in agg_df.columns:
         with st.expander("Total Technology by Alliance Over Time"):
             pivot_tech = agg_df.pivot(index='date', columns='Alliance', values='Technology')
-            chart = altair_line_chart_from_pivot(pivot_tech, "Technology", "Total Technology by Alliance Over Time")
+            chart = altair_line_chart_from_pivot(pivot_tech, "Technology")
             st.altair_chart(chart, use_container_width=True)
     
     # 6. Average Technology by Alliance Over Time
     with st.expander("Average Technology by Alliance Over Time"):
         pivot_avg_tech = agg_df.pivot(index='date', columns='Alliance', values='avg_technology')
-        chart = altair_line_chart_from_pivot(pivot_avg_tech, "avg_technology", "Average Technology by Alliance Over Time")
+        chart = altair_line_chart_from_pivot(pivot_avg_tech, "avg_technology")
         st.altair_chart(chart, use_container_width=True)
     
     # 7. Total Infrastructure by Alliance Over Time
     if 'Infrastructure' in agg_df.columns:
         with st.expander("Total Infrastructure by Alliance Over Time"):
             pivot_infra = agg_df.pivot(index='date', columns='Alliance', values='Infrastructure')
-            chart = altair_line_chart_from_pivot(pivot_infra, "Infrastructure", "Total Infrastructure by Alliance Over Time")
+            chart = altair_line_chart_from_pivot(pivot_infra, "Infrastructure")
             st.altair_chart(chart, use_container_width=True)
     
     # 8. Average Infrastructure by Alliance Over Time
     with st.expander("Average Infrastructure by Alliance Over Time"):
         pivot_avg_infra = agg_df.pivot(index='date', columns='Alliance', values='avg_infrastructure')
-        chart = altair_line_chart_from_pivot(pivot_avg_infra, "avg_infrastructure", "Average Infrastructure by Alliance Over Time")
+        chart = altair_line_chart_from_pivot(pivot_avg_infra, "avg_infrastructure")
         st.altair_chart(chart, use_container_width=True)
     
     # 9. Total Base Land by Alliance Over Time
     if 'Base Land' in agg_df.columns:
         with st.expander("Total Base Land by Alliance Over Time"):
             pivot_base_land = agg_df.pivot(index='date', columns='Alliance', values='Base Land')
-            chart = altair_line_chart_from_pivot(pivot_base_land, "Base Land", "Total Base Land by Alliance Over Time")
+            chart = altair_line_chart_from_pivot(pivot_base_land, "Base Land")
             st.altair_chart(chart, use_container_width=True)
     
     # 10. Average Base Land by Alliance Over Time
     with st.expander("Average Base Land by Alliance Over Time"):
         pivot_avg_base_land = agg_df.pivot(index='date', columns='Alliance', values='avg_base_land')
-        chart = altair_line_chart_from_pivot(pivot_avg_base_land, "avg_base_land", "Average Base Land by Alliance Over Time")
+        chart = altair_line_chart_from_pivot(pivot_avg_base_land, "avg_base_land")
         st.altair_chart(chart, use_container_width=True)
     
     # 11. Total Strength by Alliance Over Time
     if 'Strength' in agg_df.columns:
         with st.expander("Total Strength by Alliance Over Time"):
             pivot_strength = agg_df.pivot(index='date', columns='Alliance', values='Strength')
-            chart = altair_line_chart_from_pivot(pivot_strength, "Strength", "Total Strength by Alliance Over Time")
+            chart = altair_line_chart_from_pivot(pivot_strength, "Strength")
             st.altair_chart(chart, use_container_width=True)
     
     # 12. Average Strength by Alliance Over Time
     with st.expander("Average Strength by Alliance Over Time"):
         pivot_avg_strength = agg_df.pivot(index='date', columns='Alliance', values='avg_strength')
-        chart = altair_line_chart_from_pivot(pivot_avg_strength, "avg_strength", "Average Strength by Alliance Over Time")
+        chart = altair_line_chart_from_pivot(pivot_avg_strength, "avg_strength")
         st.altair_chart(chart, use_container_width=True)
     
     # 13. Total Attacking Casualties by Alliance Over Time
     if 'Attacking Casualties' in agg_df.columns:
         with st.expander("Total Attacking Casualties by Alliance Over Time"):
             pivot_attack = agg_df.pivot(index='date', columns='Alliance', values='Attacking Casualties')
-            chart = altair_line_chart_from_pivot(pivot_attack, "Attacking Casualties", "Total Attacking Casualties by Alliance Over Time")
+            chart = altair_line_chart_from_pivot(pivot_attack, "Attacking Casualties")
             st.altair_chart(chart, use_container_width=True)
     
     # 14. Average Attacking Casualties by Alliance Over Time
     with st.expander("Average Attacking Casualties by Alliance Over Time"):
         pivot_avg_attack = agg_df.pivot(index='date', columns='Alliance', values='avg_attacking_casualties')
-        chart = altair_line_chart_from_pivot(pivot_avg_attack, "avg_attacking_casualties", "Average Attacking Casualties by Alliance Over Time")
+        chart = altair_line_chart_from_pivot(pivot_avg_attack, "avg_attacking_casualties")
         st.altair_chart(chart, use_container_width=True)
     
     # 15. Total Defensive Casualties by Alliance Over Time
     if 'Defensive Casualties' in agg_df.columns:
         with st.expander("Total Defensive Casualties by Alliance Over Time"):
             pivot_defense = agg_df.pivot(index='date', columns='Alliance', values='Defensive Casualties')
-            chart = altair_line_chart_from_pivot(pivot_defense, "Defensive Casualties", "Total Defensive Casualties by Alliance Over Time")
+            chart = altair_line_chart_from_pivot(pivot_defense, "Defensive Casualties")
             st.altair_chart(chart, use_container_width=True)
     
     # 16. Average Defensive Casualties by Alliance Over Time
     with st.expander("Average Defensive Casualties by Alliance Over Time"):
         pivot_avg_defense = agg_df.pivot(index='date', columns='Alliance', values='avg_defensive_casualties')
-        chart = altair_line_chart_from_pivot(pivot_avg_defense, "avg_defensive_casualties", "Average Defensive Casualties by Alliance Over Time")
+        chart = altair_line_chart_from_pivot(pivot_avg_defense, "avg_defensive_casualties")
         st.altair_chart(chart, use_container_width=True)
     
 if __name__ == "__main__":
