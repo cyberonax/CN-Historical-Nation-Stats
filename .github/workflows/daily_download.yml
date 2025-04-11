@@ -27,7 +27,7 @@ jobs:
 
       - name: Run download script
         working-directory: downloader
-        run: python your_zip_downloader.py
+        run: python cn-history-data-downloader.py
 
       - name: Commit new downloads
         env:
