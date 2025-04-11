@@ -403,9 +403,9 @@ def main():
                     .groupby(["Nation ID", "Ruler Name"])["activity_score"]
                     .mean()
                     .reset_index()
-                    .rename(columns={"activity_score": "Average Activity Score"})
+                    .rename(columns={"activity_score": "All Time Average Days of Inactivity"})
                 )
-                st.markdown("#### Average Activity Score per Nation")
+                st.markdown("#### All Time Average Daily Inactivity per Nation")
                 st.dataframe(avg_activity)
         
         # (b) Empty Trade Slots Over Time
@@ -419,9 +419,9 @@ def main():
                 .groupby(["Nation ID", "Ruler Name"])["Empty Slots Count"]
                 .mean()
                 .reset_index()
-                .rename(columns={"Empty Slots Count": "Average Empty Trade Slots"})
+                .rename(columns={"Empty Slots Count": "All Time Average Empty Trade Slots"})
             )
-            st.markdown("#### Average Empty Trade Slots per Nation")
+            st.markdown("#### All Tme Average Empty Trade Slots per Nation")
             st.dataframe(avg_empty)
         
         # (c) Technology Over Time
