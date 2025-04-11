@@ -113,7 +113,7 @@ def aggregate_totals(df, col):
     grouped['date'] = grouped['snapshot_date'].dt.date
     return grouped.pivot(index='date', columns='Alliance', values=col)
 
-# NEW HELPER: Function to count empty trade slots
+# Function to count empty trade slots
 def count_empty_slots(row, resource_cols):
     """
     Count blank resource cells and determine trade slots (each slot covers 2 resources).
@@ -165,7 +165,7 @@ def main():
         df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
     
     with st.expander("Show Raw Data"):
-        st.dataframe(df.head(50))
+        st.dataframe(df.head)
     
     # Aggregate data by alliance (using sum for totals)
     agg_df = aggregate_by_alliance(df)
@@ -213,7 +213,7 @@ def main():
         pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
         st.line_chart(pivot_empty_total)
 
-    # --- NEW: Percentage of Nations with Empty Trade Slots ---
+    # Percentage of Nations with Empty Trade Slots ---
     with st.expander("% of Nations with Empty Trade Slots Over Time"):
         # Group total nations per snapshot_date and Alliance
         total_nations = df.groupby(['snapshot_date', 'Alliance']).agg(total_nations=('Nation ID', 'count')).reset_index()
