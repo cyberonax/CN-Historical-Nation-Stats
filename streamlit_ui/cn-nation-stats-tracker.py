@@ -84,7 +84,6 @@ def aggregate_by_alliance(df):
       
     In this aggregated DataFrame, the summed 'Strength' represents the Total Strength.
     """
-    # Use the column names as they appear in the raw data.
     numeric_cols = ['Technology', 'Infrastructure', 'Base Land', 'Strength', 'Attacking Casualties', 'Defensive Casualties']
 
     for col in numeric_cols:
@@ -109,12 +108,18 @@ def aggregate_totals(df, col):
     """
     Groups the raw data by snapshot_date and Alliance and returns a pivoted DataFrame 
     with the SUM for the specified column.
-    
-    For example, for 'Strength', this sums the strength of each nation to give Total Strength.
     """
     grouped = df.groupby(['snapshot_date', 'Alliance'])[col].sum().reset_index()
     grouped['date'] = grouped['snapshot_date'].dt.date
     return grouped.pivot(index='date', columns='Alliance', values=col)
+
+# NEW HELPER: Function to count empty trade slots
+def count_empty_slots(row, resource_cols):
+    """
+    Count blank resource cells from the given resource_cols and return the number of empty trade slots.
+    Each empty trade slot covers 2 resource cells.
+    """
+    return sum(1 for x in row[resource_cols] if pd.isnull(x) or str(x).strip() == '') // 2
 
 ##############################
 # STREAMLIT APP
@@ -132,15 +137,16 @@ def main():
         st.error("No data loaded. Please check the 'downloaded_zips' folder.")
         return
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date'])
-
-    # Define resource columns and compute empty trade slots
+    
+    # --- NEW: Compute Empty Trade Slots
+    # Define the resource columns (assumed to be "Connected Resource 1" through "Connected Resource 10")
     resource_cols = [f"Connected Resource {i}" for i in range(1, 11)]
+    # Compute the empty slots for each nation using the helper function
     df['Empty Slots Count'] = df.apply(lambda row: count_empty_slots(row, resource_cols), axis=1)
     
     # Sidebar Filters: Create a dropdown with available alliances.
     st.sidebar.header("Filters")
     alliances = sorted(df['Alliance'].dropna().unique())
-    # Set default to "Freehold of The Wolves" if available.
     default_index = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
     selected_alliance = st.sidebar.selectbox("Select Alliance", options=alliances, index=default_index)
     df = df[df['Alliance'] == selected_alliance]
@@ -179,7 +185,7 @@ def main():
         pivot_count = agg_df.pivot(index='date', columns='Alliance', values='nation_count')
         st.line_chart(pivot_count)
 
-    # Nation Activity Distribution: Average Activity Score Over Time
+    # Nation Activity Distribution: Average Alliance Activity Over Time (if Activity column exists)
     if 'Activity' in df.columns:
         with st.expander("Average Alliance Activity Over Time (Days)"):
             activity_mapping = {
@@ -236,7 +242,7 @@ def main():
         pivot_avg_infra = agg_df.pivot(index='date', columns='Alliance', values='avg_infrastructure')
         st.line_chart(pivot_avg_infra)    
 
-    # Total Base Land by Alliance Over Time (sums)
+    # 7. Total Base Land by Alliance Over Time (sums)
     if 'Base Land' in agg_df.columns:
         with st.expander("Total Base Land by Alliance Over Time"):
             pivot_base_land = agg_df.pivot(index='date', columns='Alliance', values='Base Land')
@@ -279,6 +285,6 @@ def main():
     with st.expander("Average Defensive Casualties by Alliance Over Time"):
         pivot_avg_defense = agg_df.pivot(index='date', columns='Alliance', values='avg_defensive_casualties')
         st.line_chart(pivot_avg_defense)
-
+    
 if __name__ == "__main__":
     main()
