@@ -195,7 +195,7 @@ def main():
         st.header("Aggregated Alliance Metrics Over Time")
         
         # Sidebar filters for aggregated charts.
-        st.sidebar.header("Allince Metrics Filter")
+        st.sidebar.header("Alliance Metrics")
         alliances = sorted(df_raw['Alliance'].dropna().unique())
         default1 = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
         default2 = alliances.index("CLAWS") if "CLAWS" in alliances else 0
