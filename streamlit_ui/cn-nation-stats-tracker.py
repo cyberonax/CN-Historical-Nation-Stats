@@ -165,7 +165,7 @@ def main():
         df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
     
     with st.expander("Show Raw Data"):
-        st.dataframe(df.head(2000)
+        st.dataframe(df.head(2000))
     
     # Aggregate data by alliance (using sum for totals)
     agg_df = aggregate_by_alliance(df)
