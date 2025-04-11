@@ -195,7 +195,7 @@ def main():
         st.header("Aggregated Alliance Metrics Over Time")
         
         # Sidebar filters for aggregated charts.
-        st.sidebar.header("Aggregated Filters")
+        st.sidebar.header("Allince Metrics Filter")
         alliances = sorted(df_raw['Alliance'].dropna().unique())
         default1 = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
         default2 = alliances.index("CLAWS") if "CLAWS" in alliances else 0
@@ -359,7 +359,7 @@ def main():
         st.header("Individual Nation Metrics Over Time")
         
         # Sidebar filter for individual nation metrics.
-        st.sidebar.header("Nation Metrics Filters")
+        st.sidebar.header("Nation Metrics")
         alliances = sorted(df_raw['Alliance'].dropna().unique())
         default_ind = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
         selected_alliance_ind = st.sidebar.selectbox("Select Alliance for Nation Metrics", options=alliances, index=default_ind, key="nation")
