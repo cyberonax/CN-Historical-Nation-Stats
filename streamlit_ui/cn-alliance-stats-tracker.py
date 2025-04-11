@@ -391,12 +391,12 @@ def main():
         
         # (a) Nation Activity Distribution Over Time (if available)
         if 'activity_score' in df_indiv.columns:
-            with st.expander("Nation Activity Distribution Over Time (Activity Score)"):
+            with st.expander("Nation Inctivity Over Time (Days)"):
                 chart = altair_individual_metric_chart(df_indiv.dropna(subset=['activity_score']), "activity_score", "Activity Score (Days)")
                 st.altair_chart(chart, use_container_width=True)
                 st.caption("Lower scores indicate more recent activity.")
                 
-                # NEW: Compute each nation's average activity score across snapshots.
+                # Compute each nation's average activity score across snapshots.
                 # Group by Nation ID and Ruler Name (if available) to display the average.
                 avg_activity = (
                     df_indiv.dropna(subset=['activity_score'])
