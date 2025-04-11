@@ -209,25 +209,19 @@ def main():
         pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
         st.line_chart(pivot_empty_total)
 
-    # Percentage of Empty Trade Slots Table
+    # Percentage of Empty Trade Slots by Alliance Over Time
     with st.expander("Percentage of Empty Trade Slots by Alliance Over Time"):
-        # Maximum slots per nation (assuming 10 resource columns => 5 slots)
-        max_slots = len(resource_cols) // 2
-        
-        # Group by snapshot_date and Alliance to compute total empty slots and total nations
-        empty_stats = df.groupby(['snapshot_date', 'Alliance']).agg(
-            total_empty=('Empty Slots Count', 'sum'),
-            nation_count=('Nation ID', 'count')
+        # Group data by snapshot_date and Alliance, aggregating total nations and total empty slots
+        empty_pct = df.groupby(['snapshot_date', 'Alliance']).agg(
+            nation_count=('Nation ID', 'count'),
+            total_empty=('Empty Slots Count', 'sum')
         ).reset_index()
-        
-        # Calculate percentage of empty trade slots
-        empty_stats['Empty Slots %'] = (empty_stats['total_empty'] / (empty_stats['nation_count'] * max_slots)) * 100
-        empty_stats['Empty Slots %'] = empty_stats['Empty Slots %'].round(2)
-        empty_stats['date'] = empty_stats['snapshot_date'].dt.date
-        
-        # Select and display the relevant columns
-        display_table = empty_stats[['date', 'Alliance', 'Empty Slots %']]
-        st.dataframe(display_table.sort_values('date'))
+        # Calculate percentage of empty slots per nation
+        empty_pct['empty_pct'] = (empty_pct['total_empty'] / empty_pct['nation_count']) * 100
+        empty_pct['date'] = empty_pct['snapshot_date'].dt.date
+        # Pivot the data for the chart with date on index and alliances as columns
+        pivot_empty_pct = empty_pct.pivot(index='date', columns='Alliance', values='empty_pct')
+        st.line_chart(pivot_empty_pct)
 
     # Average Empty Trade Slots by Alliance Over Time
     with st.expander("Average Empty Trade Slots by Alliance Over Time"):
