@@ -112,7 +112,7 @@ def altair_line_chart_from_pivot(pivot_df, y_field, alliances):
     A dynamic color scale is generated based on the provided alliances.
     """
     # Generate a dynamic color scale.
-    predefined_colors = ["red", "yellow", "blue", "green", "purple", "orange", "brown", "pink"]
+    predefined_colors = ["yellow", "red", "blue", "green", "purple", "orange", "brown", "pink"]
     # If more alliances than predefined colors, cycle through the list.
     color_range = list(itertools.islice(itertools.cycle(predefined_colors), len(alliances)))
     
