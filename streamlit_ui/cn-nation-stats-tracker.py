@@ -16,8 +16,7 @@ def parse_date_from_filename(filename):
     
     The dateToken is a concatenation of month, day, and year.
     For example, from "CyberNations_SE_Nation_Stats_452025510002.zip":
-      date_token = "452025" which is interpreted as:
-        month = 4, day = 5, year = 2025.
+      date_token = "452025" is interpreted as month=4, day=5, year=2025.
     Returns a datetime object on success, otherwise None.
     """
     pattern = r'^CyberNations_SE_Nation_Stats_([0-9]+)(510001|510002)\.zip$'
@@ -25,7 +24,6 @@ def parse_date_from_filename(filename):
     if not match:
         return None
     date_token = match.group(1)
-    # Try possible splits: month: 1-2 digits, day: 1-2 digits, year: 4 digits.
     for m_digits in [1, 2]:
         for d_digits in [1, 2]:
             if m_digits + d_digits + 4 == len(date_token):
@@ -83,7 +81,6 @@ def aggregate_by_alliance(df):
       - Sum of Attacking and Defensive Casualties
       - Averages for Infra, Tech, Base Land, Strength, and Empty Trade Slots (if available)
     """
-    # List of all numeric columns we want to aggregate
     numeric_cols = ['Attacking Casualties', 'Defensive Casualties', 'Infra', 'Tech', 'Base Land', 'Strength', 'Empty Trade Slots']
     for col in numeric_cols:
         if col in df.columns:
@@ -102,6 +99,15 @@ def aggregate_by_alliance(df):
     grouped.rename(columns={'Nation ID': 'nation_count'}, inplace=True)
     return grouped
 
+def aggregate_totals(df, col):
+    """
+    Groups raw data by snapshot_date and Alliance and returns a pivoted DataFrame 
+    with the SUM for the specified column.
+    """
+    grouped = df.groupby(['snapshot_date', 'Alliance'])[col].sum().reset_index()
+    grouped['date'] = grouped['snapshot_date'].dt.date
+    return grouped.pivot(index='date', columns='Alliance', values=col)
+
 ##############################
 # STREAMLIT APP
 ##############################
@@ -113,23 +119,23 @@ def main():
         Data is loaded from historical zip files stored in the `downloaded_zips` folder.
     """)
     
-    # Load historical data
+    # Load data
     df = load_data()
     if df.empty:
         st.error("No data loaded. Please check the 'downloaded_zips' folder.")
         return
-    
-    # Ensure snapshot_date is datetime
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date'])
     
-    # Sidebar Filters: Filter by alliance and date range.
+    # Sidebar Filters: Create a dropdown with all available alliances.
     st.sidebar.header("Filters")
-    # Set default text to "Freehold of the Wolves"
-    alliance_filter = st.sidebar.text_input("Filter Nations by Alliance", value="Freehold of the Wolves")
-    if alliance_filter:
-        df = df[df['Alliance'].str.contains(alliance_filter, case=False, na=False)]
     
-    # Create a date column for filtering
+    # Get unique alliances from the data
+    alliances = sorted(df['Alliance'].dropna().unique())
+    default_index = alliances.index("Freehold of the Wolves") if "Freehold of the Wolves" in alliances else 0
+    selected_alliance = st.sidebar.selectbox("Select Alliance", options=alliances, index=default_index)
+    df = df[df['Alliance'] == selected_alliance]
+    
+    # Create a date column for filtering and get min/max dates.
     df['date'] = df['snapshot_date'].dt.date
     min_date = df['date'].min()
     max_date = df['date'].max()
@@ -145,10 +151,14 @@ def main():
     agg_df = aggregate_by_alliance(df)
     agg_df['date'] = agg_df['snapshot_date'].dt.date
     
-    st.subheader("Aggregated Alliance Data")
-    st.dataframe(agg_df.sort_values('date'))
+    # Compute average casualties from totals and nation count
+    agg_df['avg_attacking_casualties'] = agg_df['Attacking Casualties'] / agg_df['nation_count']
+    agg_df['avg_defensive_casualties'] = agg_df['Defensive Casualties'] / agg_df['nation_count']
     
-    # Collapsible charts for different metrics
+    with st.expander("Show Aggregated Alliance Data Table"):
+        st.dataframe(agg_df.sort_values('date'))
+    
+    # Collapsible charts for different metrics:
     
     # 1. Nation Count by Alliance
     with st.expander("Nation Count by Alliance Over Time"):
@@ -161,46 +171,49 @@ def main():
             pivot_attack = agg_df.pivot(index='date', columns='Alliance', values='Attacking Casualties')
             st.line_chart(pivot_attack)
     
-    # 3. Total Defensive Casualties by Alliance
+    # 3. Average Attacking Casualties by Alliance Over Time
+    with st.expander("Average Attacking Casualties by Alliance Over Time"):
+        pivot_avg_attack = agg_df.pivot(index='date', columns='Alliance', values='avg_attacking_casualties')
+        st.line_chart(pivot_avg_attack)
+    
+    # 4. Total Defensive Casualties by Alliance
     if 'Defensive Casualties' in agg_df.columns:
         with st.expander("Total Defensive Casualties by Alliance Over Time"):
             pivot_defense = agg_df.pivot(index='date', columns='Alliance', values='Defensive Casualties')
             st.line_chart(pivot_defense)
     
-    # 4. Average Infra by Alliance
-    if 'Infra' in agg_df.columns:
-        with st.expander("Average Infra by Alliance Over Time"):
-            pivot_infra = agg_df.pivot(index='date', columns='Alliance', values='Infra')
-            st.line_chart(pivot_infra)
+    # 5. Average Defensive Casualties by Alliance Over Time
+    with st.expander("Average Defensive Casualties by Alliance Over Time"):
+        pivot_avg_defense = agg_df.pivot(index='date', columns='Alliance', values='avg_defensive_casualties')
+        st.line_chart(pivot_avg_defense)
     
-    # 5. Average Tech by Alliance
-    if 'Tech' in agg_df.columns:
-        with st.expander("Average Tech by Alliance Over Time"):
-            pivot_tech = agg_df.pivot(index='date', columns='Alliance', values='Tech')
-            st.line_chart(pivot_tech)
+    # 6. Total Infra by Alliance Over Time (sums)
+    if 'Infra' in df.columns:
+        with st.expander("Total Infra by Alliance Over Time"):
+            pivot_total_infra = aggregate_totals(df, 'Infra')
+            st.line_chart(pivot_total_infra)
     
-    # 6. Average Base Land by Alliance
-    if 'Base Land' in agg_df.columns:
-        with st.expander("Average Base Land by Alliance Over Time"):
-            pivot_land = agg_df.pivot(index='date', columns='Alliance', values='Base Land')
-            st.line_chart(pivot_land)
+    # 7. Total Tech by Alliance Over Time (sums)
+    if 'Tech' in df.columns:
+        with st.expander("Total Tech by Alliance Over Time"):
+            pivot_total_tech = aggregate_totals(df, 'Tech')
+            st.line_chart(pivot_total_tech)
     
-    # 7. Average Strength by Alliance
-    if 'Strength' in agg_df.columns:
-        with st.expander("Average Strength by Alliance Over Time"):
-            pivot_strength = agg_df.pivot(index='date', columns='Alliance', values='Strength')
-            st.line_chart(pivot_strength)
+    # 8. Total Base Land by Alliance Over Time (sums)
+    if 'Base Land' in df.columns:
+        with st.expander("Total Base Land by Alliance Over Time"):
+            pivot_total_land = aggregate_totals(df, 'Base Land')
+            st.line_chart(pivot_total_land)
     
-    # 8. Average Empty Trade Slots by Alliance
-    if 'Empty Trade Slots' in agg_df.columns:
-        with st.expander("Average Empty Trade Slots by Alliance Over Time"):
-            pivot_empty = agg_df.pivot(index='date', columns='Alliance', values='Empty Trade Slots')
-            st.line_chart(pivot_empty)
+    # 9. Total Strength by Alliance Over Time (sums)
+    if 'Strength' in df.columns:
+        with st.expander("Total Strength by Alliance Over Time"):
+            pivot_total_strength = aggregate_totals(df, 'Strength')
+            st.line_chart(pivot_total_strength)
     
-    # 9. Nation Activity Distribution with Recoded Values
+    # 10. Nation Activity Distribution: Average Activity Score Over Time
     if 'Activity' in df.columns:
-        with st.expander("Nation Activity Distribution Over Time"):
-            # Map the Activity values to numeric scores
+        with st.expander("Nation Activity Distribution Over Time (Average Score)"):
             activity_mapping = {
                 "Active in the Last 3 Days": 3,
                 "Active This Week": 7,
@@ -209,12 +222,11 @@ def main():
                 "Active More Than Three Weeks Ago": 28
             }
             df['activity_score'] = df['Activity'].map(activity_mapping)
-            # Drop any rows that didn't match the mapping
             df_activity = df.dropna(subset=['activity_score'])
-            # Group by date and compute the average activity score (or you can compute sums/counts as needed)
-            activity_score_df = df_activity.groupby('date')['activity_score'].mean().reset_index()
-            activity_score_df = activity_score_df.set_index('date')
-            st.line_chart(activity_score_df)
-
+            activity_grouped = df_activity.groupby(['date'])['activity_score'].mean().reset_index()
+            activity_grouped = activity_grouped.set_index('date')
+            st.line_chart(activity_grouped)
+            st.caption("Lower scores indicate more recent activity.")
+    
 if __name__ == "__main__":
     main()
