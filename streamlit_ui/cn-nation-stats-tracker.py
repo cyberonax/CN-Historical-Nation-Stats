@@ -78,17 +78,17 @@ def aggregate_by_alliance(df):
     Aggregates nation stats by snapshot_date and Alliance.
     
     For each group (by snapshot_date and Alliance):
-      - The number of nations is computed via count (as 'nation_count').
-      - Other metrics (Attacking Casualties, Defensive Casualties,
-        Infrastructure, Technology, Base Land, and Strength) are summed.
-      
-    In this aggregated DataFrame, the summed 'Strength' represents the Total Strength.
+      - Count the number of nations (renamed as 'nation_count').
+      - Sum the metrics (Attacking Casualties, Defensive Casualties,
+        Infrastructure, Technology, Base Land, and Strength).
     """
     numeric_cols = ['Technology', 'Infrastructure', 'Base Land', 'Strength', 'Attacking Casualties', 'Defensive Casualties']
 
+    # Convert relevant columns to string, remove commas, then to numeric
     for col in numeric_cols:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Remove commas and extra spaces before converting
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.strip(), errors='coerce')
     
     agg_dict = {
         'Nation ID': 'count',  # This will be renamed to nation_count.
@@ -103,6 +103,7 @@ def aggregate_by_alliance(df):
     grouped = df.groupby(['snapshot_date', 'Alliance']).agg(agg_dict).reset_index()
     grouped.rename(columns={'Nation ID': 'nation_count'}, inplace=True)
     return grouped
+
 
 def aggregate_totals(df, col):
     """
@@ -165,12 +166,7 @@ def main():
         df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
     
     with st.expander("Show Raw Data"):
-        st.dataframe(df.head(2000))
-
-    st.write("Raw Technology values:", df['Technology'].head(10))
-    st.write("Number of rows in loaded data:", len(df))
-    st.write("Unique snapshot dates:", df['snapshot_date'].unique())
-
+        st.dataframe(df)
     
     # Aggregate data by alliance (using sum for totals)
     agg_df = aggregate_by_alliance(df)
