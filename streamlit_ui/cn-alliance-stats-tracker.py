@@ -407,6 +407,7 @@ def main():
                 )
                 st.markdown("#### All Time Average Daily Inactivity per Nation")
                 st.dataframe(avg_activity)
+                st.caption("Only inactive nations are shown.")
         
         # (b) Empty Trade Slots Over Time
         with st.expander("Empty Trade Slots Over Time"):
