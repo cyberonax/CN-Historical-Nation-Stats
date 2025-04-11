@@ -213,30 +213,19 @@ def main():
         pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
         st.line_chart(pivot_empty_total)
 
-    # Percentage of Empty Trade Slots by Alliance Over Time
-    with st.expander("Percentage of Empty Trade Slots by Alliance Over Time"):
-        # Group data by snapshot_date and Alliance, aggregating total nations and total empty slots
-        empty_pct = df.groupby(['snapshot_date', 'Alliance']).agg(
-            nation_count=('Nation ID', 'count'),
-            total_empty=('Empty Slots Count', 'sum')
-        ).reset_index()
-        # Calculate percentage of empty slots per nation
-        empty_pct['empty_pct'] = (empty_pct['total_empty'] / empty_pct['nation_count']) * 100
-        empty_pct['date'] = empty_pct['snapshot_date'].dt.date
-        # Pivot the data for the chart with date on index and alliances as columns
-        pivot_empty_pct = empty_pct.pivot(index='date', columns='Alliance', values='empty_pct')
-        st.line_chart(pivot_empty_pct)
-
-    # Average Empty Trade Slots by Alliance Over Time
-    with st.expander("Average Empty Trade Slots by Alliance Over Time"):
-        empty_avg = df.groupby(['snapshot_date', 'Alliance']).agg(
-            nation_count=('Nation ID', 'count'),
-            total_empty=('Empty Slots Count', 'sum')
-        ).reset_index()
-        empty_avg['avg_empty'] = empty_avg['total_empty'] / empty_avg['nation_count']
-        empty_avg['date'] = empty_avg['snapshot_date'].dt.date
-        pivot_empty_avg = empty_avg.pivot(index='date', columns='Alliance', values='avg_empty')
-        st.line_chart(pivot_empty_avg)
+    # --- NEW: Percentage of Nations with Empty Trade Slots ---
+    with st.expander("% of Nations with Empty Trade Slots Over Time"):
+        # Group total nations per snapshot_date and Alliance
+        total_nations = df.groupby(['snapshot_date', 'Alliance']).agg(total_nations=('Nation ID', 'count')).reset_index()
+        # Group nations with empty slots (> 0)
+        empty_nations = df[df['Empty Slots Count'] > 0].groupby(['snapshot_date', 'Alliance']).agg(empty_nations=('Nation ID', 'count')).reset_index()
+        # Merge the two groups to compute the ratio
+        ratio_df = pd.merge(total_nations, empty_nations, on=['snapshot_date', 'Alliance'], how='left')
+        ratio_df['empty_nations'] = ratio_df['empty_nations'].fillna(0)
+        ratio_df['percent_empty'] = (ratio_df['empty_nations'] / ratio_df['total_nations']) * 100
+        ratio_df['date'] = ratio_df['snapshot_date'].dt.date
+        pivot_ratio = ratio_df.pivot(index='date', columns='Alliance', values='percent_empty')
+        st.line_chart(pivot_ratio)
 
     # Total Technology by Alliance Over Time (sums)
     if 'Technology' in agg_df.columns:
