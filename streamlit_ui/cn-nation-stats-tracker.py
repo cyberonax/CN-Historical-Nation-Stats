@@ -237,13 +237,13 @@ def main():
             }
             df['activity_score'] = df['Activity'].map(activity_mapping)
             df_activity = df.dropna(subset=['activity_score'])
-            activity_grouped = df_activity.groupby('date')['activity_score'].mean().reset_index()
-            activity_chart = alt.Chart(activity_grouped).mark_line().encode(
-                x=alt.X("date:T", title=""),
-                y=alt.Y("activity_score:Q", title=""),
-                tooltip=["date:T", "activity_score:Q"]
-            ).properties(width=700, height=400).interactive()
-            st.altair_chart(activity_chart, use_container_width=True)
+            # Group data by date and alliance
+            activity_grouped = df_activity.groupby(['date', 'Alliance'])['activity_score'].mean().reset_index()
+            # Pivot data for Altair plotting
+            pivot_activity = activity_grouped.pivot(index='date', columns='Alliance', values='activity_score')
+            chart = altair_line_chart_from_pivot(pivot_activity, "activity_score")
+            st.altair_chart(chart, use_container_width=True)
+            st.caption("Lower scores indicate more recent activity.")
     
     # 3. Total Empty Trade Slots by Alliance Over Time
     with st.expander("Total Empty Trade Slots by Alliance Over Time"):
