@@ -217,7 +217,7 @@ def main():
     # If Activity column exists, map activity to a numeric score.
     if 'Activity' in df_raw.columns:
         activity_mapping = {
-            "Active in the Last 3 Days": 3,
+            "Active In The Last 3 Days": 3,
             "Active This Week": 7,
             "Active Last Week": 14,
             "Active Three Weeks Ago": 21,
