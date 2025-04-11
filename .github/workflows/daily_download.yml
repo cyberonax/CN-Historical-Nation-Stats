@@ -29,6 +29,17 @@ jobs:
         working-directory: downloader
         run: python cn-history-data-downloader.py
 
+      - name: Move downloaded files to repository root
+        run: |
+          # Check if the folder exists in the downloader folder.
+          if [ -d downloader/downloaded_zips ]; then
+              # Move it to the repository root.
+              mv downloader/downloaded_zips ./downloaded_zips
+              echo "Moved downloaded_zips folder to repository root."
+          else
+              echo "No downloaded_zips folder found in downloader."
+          fi
+
       - name: Prepare downloaded_zips folder
         run: mkdir -p downloaded_zips
 
@@ -40,7 +51,7 @@ jobs:
           git config --local user.email "github-actions@github.com"
           if [ -d downloaded_zips ] && [ "$(ls -A downloaded_zips)" ]; then
             git add downloaded_zips/
-            # Only commit if there is a change
+            # Only commit if there are changes.
             git diff --cached --exit-code || git commit -m "Add daily downloaded zip files"
           else
             echo "downloaded_zips folder is empty or does not exist; nothing to commit."
