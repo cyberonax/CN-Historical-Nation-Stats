@@ -192,56 +192,55 @@ def main():
             st.line_chart(activity_grouped)
             st.caption("Lower scores indicate more recent activity.")
 
-    # 2. Total Attacking Casualties by Alliance Over Time
-    if 'Attacking Casualties' in agg_df.columns:
-        with st.expander("Total Attacking Casualties by Alliance Over Time"):
-            pivot_attack = agg_df.pivot(index='date', columns='Alliance', values='Attacking Casualties')
-            st.line_chart(pivot_attack)
-
-    # 3. Total Technology by Alliance Over Time (sums)
+    # 2. Total Technology by Alliance Over Time (sums)
     if 'Technology' in agg_df.columns:
         with st.expander("Total Technology by Alliance Over Time"):
             pivot_tech = agg_df.pivot(index='date', columns='Alliance', values='Technology')
             st.line_chart(pivot_tech)
     
-    # 4. Average Technology by Alliance Over Time
+    # 3. Average Technology by Alliance Over Time
     with st.expander("Average Technology by Alliance Over Time"):
         pivot_avg_tech = agg_df.pivot(index='date', columns='Alliance', values='avg_technology')
         st.line_chart(pivot_avg_tech)
     
-    # 5. Total Infrastructure by Alliance Over Time (sums)
+    # 4. Total Infrastructure by Alliance Over Time (sums)
     if 'Infrastructure' in agg_df.columns:
         with st.expander("Total Infrastructure by Alliance Over Time"):
             pivot_infra = agg_df.pivot(index='date', columns='Alliance', values='Infrastructure')
             st.line_chart(pivot_infra)
     
-    # 6. Average Infrastructure by Alliance Over Time
+    # 5. Average Infrastructure by Alliance Over Time
     with st.expander("Average Infrastructure by Alliance Over Time"):
         pivot_avg_infra = agg_df.pivot(index='date', columns='Alliance', values='avg_infrastructure')
         st.line_chart(pivot_avg_infra)    
 
-
-    # 7. Total Base Land by Alliance Over Time (sums)
+    # 6. Total Base Land by Alliance Over Time (sums)
     if 'Base Land' in agg_df.columns:
         with st.expander("Total Base Land by Alliance Over Time"):
             pivot_base_land = agg_df.pivot(index='date', columns='Alliance', values='Base Land')
             st.line_chart(pivot_base_land)
     
-    # 8. Average Base Land by Alliance Over Time
+    # 7. Average Base Land by Alliance Over Time
     with st.expander("Average Base Land by Alliance Over Time"):
         pivot_avg_base_land = agg_df.pivot(index='date', columns='Alliance', values='avg_base_land')
         st.line_chart(pivot_avg_base_land)
     
-    # 9. Total Strength by Alliance Over Time (sums)
+    # 8. Total Strength by Alliance Over Time (sums)
     if 'Strength' in agg_df.columns:
         with st.expander("Total Strength by Alliance Over Time"):
             pivot_strength = agg_df.pivot(index='date', columns='Alliance', values='Strength')
             st.line_chart(pivot_strength)
     
-    # 10. Average Strength by Alliance Over Time
+    # 9. Average Strength by Alliance Over Time
     with st.expander("Average Strength by Alliance Over Time"):
         pivot_avg_strength = agg_df.pivot(index='date', columns='Alliance', values='avg_strength')
         st.line_chart(pivot_avg_strength)
+
+    # 10. Total Attacking Casualties by Alliance Over Time
+    if 'Attacking Casualties' in agg_df.columns:
+        with st.expander("Total Attacking Casualties by Alliance Over Time"):
+            pivot_attack = agg_df.pivot(index='date', columns='Alliance', values='Attacking Casualties')
+            st.line_chart(pivot_attack)
 
     # 11. Average Attacking Casualties by Alliance Over Time
     with st.expander("Average Attacking Casualties by Alliance Over Time"):
