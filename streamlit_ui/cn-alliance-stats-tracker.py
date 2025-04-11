@@ -389,19 +389,40 @@ def main():
         
         st.markdown(f"### Charts for Alliance: {selected_alliance_ind}")
         
-        # Now include charts for important metrics in the original order:
-        
         # (a) Nation Activity Distribution Over Time (if available)
         if 'activity_score' in df_indiv.columns:
             with st.expander("Nation Activity Distribution Over Time (Activity Score)"):
                 chart = altair_individual_metric_chart(df_indiv.dropna(subset=['activity_score']), "activity_score", "Activity Score (Days)")
                 st.altair_chart(chart, use_container_width=True)
                 st.caption("Lower scores indicate more recent activity.")
+                
+                # NEW: Compute each nation's average activity score across snapshots.
+                # Group by Nation ID and Ruler Name (if available) to display the average.
+                avg_activity = (
+                    df_indiv.dropna(subset=['activity_score'])
+                    .groupby(["Nation ID", "Ruler Name"])["activity_score"]
+                    .mean()
+                    .reset_index()
+                    .rename(columns={"activity_score": "Average Activity Score"})
+                )
+                st.markdown("#### Average Activity Score per Nation")
+                st.dataframe(avg_activity)
         
         # (b) Empty Trade Slots Over Time
         with st.expander("Empty Trade Slots Over Time"):
             chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Empty Slots Count']), "Empty Slots Count", "Empty Trade Slots")
             st.altair_chart(chart, use_container_width=True)
+            
+            # Compute each nation's average empty trade slots across snapshots.
+            avg_empty = (
+                df_indiv.dropna(subset=['Empty Slots Count'])
+                .groupby(["Nation ID", "Ruler Name"])["Empty Slots Count"]
+                .mean()
+                .reset_index()
+                .rename(columns={"Empty Slots Count": "Average Empty Trade Slots"})
+            )
+            st.markdown("#### Average Empty Trade Slots per Nation")
+            st.dataframe(avg_empty)
         
         # (c) Technology Over Time
         if 'Technology' in df_indiv.columns:
