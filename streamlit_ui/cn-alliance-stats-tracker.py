@@ -157,7 +157,7 @@ def altair_line_chart_from_pivot(pivot_df, y_field):
 ##############################
 
 def main():
-    st.title("Cyber Nations | Nation Stats Timeline Tracker")
+    st.title("Cyber Nations | Alliance Stats Timeline Tracker")
     st.markdown("""
         This dashboard displays a time-based stream of nation statistics grouped by alliance.
     """)
