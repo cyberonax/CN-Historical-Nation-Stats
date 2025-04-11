@@ -116,10 +116,14 @@ def aggregate_totals(df, col):
 # NEW HELPER: Function to count empty trade slots
 def count_empty_slots(row, resource_cols):
     """
-    Count blank resource cells from the given resource_cols and return the number of empty trade slots.
-    Each empty trade slot covers 2 resource cells.
+    Count blank resource cells and determine trade slots (each slot covers 2 resources).
     """
     return sum(1 for x in row[resource_cols] if pd.isnull(x) or str(x).strip() == '') // 2
+
+def get_current_resources(row, resource_cols):
+    """Return a comma-separated string of non-blank resources sorted alphabetically."""
+    resources = sorted([str(x).strip() for x in row[resource_cols] if pd.notnull(x) and str(x).strip() != ''])
+    return ", ".join(resources)
 
 ##############################
 # STREAMLIT APP
@@ -138,7 +142,7 @@ def main():
         return
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date'])
     
-    # --- NEW: Compute Empty Trade Slots
+    # Compute Empty Trade Slots
     # Define the resource columns (assumed to be "Connected Resource 1" through "Connected Resource 10")
     resource_cols = [f"Connected Resource {i}" for i in range(1, 11)]
     # Compute the empty slots for each nation using the helper function
@@ -255,8 +259,8 @@ def main():
     with st.expander("Average Infrastructure by Alliance Over Time"):
         pivot_avg_infra = agg_df.pivot(index='date', columns='Alliance', values='avg_infrastructure')
         st.line_chart(pivot_avg_infra)    
-
-    # 7. Total Base Land by Alliance Over Time (sums)
+    
+    # Total Base Land by Alliance Over Time (sums)
     if 'Base Land' in agg_df.columns:
         with st.expander("Total Base Land by Alliance Over Time"):
             pivot_base_land = agg_df.pivot(index='date', columns='Alliance', values='Base Land')
