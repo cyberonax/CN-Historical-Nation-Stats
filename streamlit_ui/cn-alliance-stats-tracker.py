@@ -128,27 +128,61 @@ def altair_line_chart_from_pivot(pivot_df, y_field):
     ).interactive()
     return chart
 
-def altair_individual_metric_chart(df, metric, title, show_ruler_tooltip=True):
+def altair_individual_metric_chart(df, metric, title, show_ruler_on_hover=True):
     """
     Creates an Altair line chart from raw nation-level data for a given metric.
-    Each line represents a Nation and is colored by its Ruler Name.
-    The tooltip includes the date, the metric value, and optionally the Ruler Name based on the 
-    show_ruler_tooltip parameter.
+    Each line represents a Nation (displayed with its Ruler Name instead of Nation ID).
+
+    When show_ruler_on_hover is True an interactive layer shows the Ruler Name as text on hover.
     """
-    # Build tooltip fields based on whether to show Ruler Name.
-    tooltip_fields = ["date:T", alt.Tooltip(f"{metric}:Q", title=title)]
-    if show_ruler_tooltip:
-        tooltip_fields.insert(1, "Ruler Name")
-        
-    chart = alt.Chart(df).mark_line().encode(
+    # Base chart with common encodings.
+    base = alt.Chart(df).encode(
         x=alt.X("date:T", title="Date"),
         y=alt.Y(f"{metric}:Q", title=title),
-        color=alt.Color("Ruler Name:N", legend=alt.Legend(title="Ruler Name")),
-        tooltip=tooltip_fields
-    ).properties(
-        width=700,
-        height=400
-    ).interactive()
+        color=alt.Color("Ruler Name:N", legend=alt.Legend(title="Ruler Name"))
+    )
+    
+    # Define tooltip including Ruler Name and other info.
+    tooltip = [alt.Tooltip("date:T", title="Date"), "Ruler Name", alt.Tooltip(f"{metric}:Q", title=title)]
+    
+    # Draw the main line.
+    line = base.mark_line()
+    
+    if show_ruler_on_hover:
+        # Create a nearest selection that reacts to mouse hover.
+        nearest = alt.selection(type='single', nearest=True, on='mouseover', fields=['date'], empty='none')
+        
+        # Transparent selectors across the chart.
+        selectors = base.mark_point().encode(
+            opacity=alt.value(0)
+        ).add_selection(nearest)
+        
+        # Points on the line that appear on hover.
+        points = line.mark_point().encode(
+            opacity=alt.condition(nearest, alt.value(1), alt.value(0))
+        )
+        
+        # Text label to display the Ruler Name.
+        text = line.mark_text(align='left', dx=5, dy=-5).encode(
+            text=alt.condition(nearest, "Ruler Name:N", alt.value(''))
+        )
+        
+        # Layer all parts together.
+        layered_chart = alt.layer(line, selectors, points, text).encode(
+            tooltip=tooltip
+        ).properties(
+            width=700,
+            height=400
+        ).interactive()
+        chart = layered_chart
+    else:
+        chart = line.encode(
+            tooltip=tooltip
+        ).properties(
+            width=700,
+            height=400
+        ).interactive()
+        
     return chart
 
 ##############################
@@ -375,8 +409,8 @@ def main():
         nation_ids = sorted(df_raw["Nation ID"].dropna().unique())
         selected_nation_ids = st.sidebar.multiselect("Filter by Nation ID", options=nation_ids, default=[], key="filter_nation_id")
         
-        # New checkbox option to toggle showing the Ruler Name on hover.
-        show_ruler_tooltip = st.sidebar.checkbox("Show Ruler Name on Hover", value=True, key="ruler_tooltip")
+        # Add an option to show the Ruler Name on hover.
+        show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option")
         
         # Filter raw data for the selected alliance.
         df_indiv = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
@@ -400,17 +434,11 @@ def main():
         # (a) Nation Activity Distribution Over Time (if available)
         if 'activity_score' in df_indiv.columns:
             with st.expander("Nation Inctivity Over Time (Days)"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['activity_score']),
-                    "activity_score",
-                    "Activity Score (Days)",
-                    show_ruler_tooltip=show_ruler_tooltip
-                )
+                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['activity_score']), "activity_score", "Activity Score (Days)", show_ruler_on_hover=show_hover)
                 st.altair_chart(chart, use_container_width=True)
                 st.caption("Lower scores indicate more recent activity.")
                 
                 # Compute each nation's average activity score across snapshots.
-                # Group by Nation ID and Ruler Name (if available) to display the average.
                 avg_activity = (
                     df_indiv.dropna(subset=['activity_score'])
                     .groupby(["Nation ID", "Ruler Name"])["activity_score"]
@@ -424,12 +452,7 @@ def main():
         
         # (b) Empty Trade Slots Over Time
         with st.expander("Empty Trade Slots Over Time"):
-            chart = altair_individual_metric_chart(
-                df_indiv.dropna(subset=['Empty Slots Count']),
-                "Empty Slots Count",
-                "Empty Trade Slots",
-                show_ruler_tooltip=show_ruler_tooltip
-            )
+            chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Empty Slots Count']), "Empty Slots Count", "Empty Trade Slots", show_ruler_on_hover=show_hover)
             st.altair_chart(chart, use_container_width=True)
             
             # Compute each nation's average empty trade slots across snapshots.
@@ -438,7 +461,7 @@ def main():
                 .groupby(["Nation ID", "Ruler Name"])["Empty Slots Count"]
                 .mean()
                 .reset_index()
-                .rename(columns={"Empty Slots Count": "All Tme Average Empty Trade Slots"})
+                .rename(columns={"Empty Slots Count": "All Time Average Empty Trade Slots"})
             )
             st.markdown("#### All Tme Average Empty Trade Slots per Nation")
             st.dataframe(avg_empty)
@@ -446,67 +469,37 @@ def main():
         # (c) Technology Over Time
         if 'Technology' in df_indiv.columns:
             with st.expander("Technology Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Technology']),
-                    "Technology",
-                    "Technology",
-                    show_ruler_tooltip=show_ruler_tooltip
-                )
+                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Technology']), "Technology", "Technology", show_ruler_on_hover=show_hover)
                 st.altair_chart(chart, use_container_width=True)
         
         # (d) Infrastructure Over Time
         if 'Infrastructure' in df_indiv.columns:
             with st.expander("Infrastructure Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Infrastructure']),
-                    "Infrastructure",
-                    "Infrastructure",
-                    show_ruler_tooltip=show_ruler_tooltip
-                )
+                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Infrastructure']), "Infrastructure", "Infrastructure", show_ruler_on_hover=show_hover)
                 st.altair_chart(chart, use_container_width=True)
         
         # (e) Base Land Over Time
         if 'Base Land' in df_indiv.columns:
             with st.expander("Base Land Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Base Land']),
-                    "Base Land",
-                    "Base Land",
-                    show_ruler_tooltip=show_ruler_tooltip
-                )
+                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Base Land']), "Base Land", "Base Land", show_ruler_on_hover=show_hover)
                 st.altair_chart(chart, use_container_width=True)
         
         # (f) Strength Over Time
         if 'Strength' in df_indiv.columns:
             with st.expander("Strength Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Strength']),
-                    "Strength",
-                    "Strength",
-                    show_ruler_tooltip=show_ruler_tooltip
-                )
+                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Strength']), "Strength", "Strength", show_ruler_on_hover=show_hover)
                 st.altair_chart(chart, use_container_width=True)
         
         # (g) Attacking Casualties Over Time
         if 'Attacking Casualties' in df_indiv.columns:
             with st.expander("Attacking Casualties Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Attacking Casualties']),
-                    "Attacking Casualties",
-                    "Attacking Casualties",
-                    show_ruler_tooltip=show_ruler_tooltip
-                )
+                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Attacking Casualties']), "Attacking Casualties", "Attacking Casualties", show_ruler_on_hover=show_hover)
                 st.altair_chart(chart, use_container_width=True)
         
         # (h) Defensive Casualties Over Time
         if 'Defensive Casualties' in df_indiv.columns:
             with st.expander("Defensive Casualties Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Defensive Casualties']),
-                    "Defensive Casualties",
-                    "Defensive Casualties",
-                    show_ruler_tooltip=show_ruler_tooltip
-                )
+                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Defensive Casualties']), "Defensive Casualties", "Defensive Casualties", show_ruler_on_hover=show_hover)
                 st.altair_chart(chart, use_container_width=True)
 
 if __name__ == "__main__":
