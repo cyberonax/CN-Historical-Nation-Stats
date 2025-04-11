@@ -87,7 +87,6 @@ def aggregate_by_alliance(df):
     # Convert relevant columns to string, remove commas, then to numeric
     for col in numeric_cols:
         if col in df.columns:
-            # Remove commas and extra spaces before converting
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.strip(), errors='coerce')
     
     agg_dict = {
@@ -144,17 +143,24 @@ def main():
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date'])
     
     # Compute Empty Trade Slots
-    # Define the resource columns (assumed to be "Connected Resource 1" through "Connected Resource 10")
     resource_cols = [f"Connected Resource {i}" for i in range(1, 11)]
-    # Compute the empty slots for each nation using the helper function
     df['Empty Slots Count'] = df.apply(lambda row: count_empty_slots(row, resource_cols), axis=1)
     
-    # Sidebar Filters: Create a dropdown with available alliances.
+    # Sidebar Filters: Create three dropdown boxes with available alliances.
     st.sidebar.header("Filters")
     alliances = sorted(df['Alliance'].dropna().unique())
-    default_index = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
-    selected_alliance = st.sidebar.selectbox("Select Alliance", options=alliances, index=default_index)
-    df = df[df['Alliance'] == selected_alliance]
+    # Set default indices if available; otherwise fallback to 0
+    default1 = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
+    default2 = alliances.index("CLAWS") if "CLAWS" in alliances else 0
+    default3 = alliances.index("NATO") if "NATO" in alliances else 0
+    
+    selected_alliance1 = st.sidebar.selectbox("Select Alliance 1", options=alliances, index=default1)
+    selected_alliance2 = st.sidebar.selectbox("Select Alliance 2", options=alliances, index=default2)
+    selected_alliance3 = st.sidebar.selectbox("Select Alliance 3", options=alliances, index=default3)
+    
+    # Filter the data to include only the selected alliances.
+    comparison_alliances = [selected_alliance1, selected_alliance2, selected_alliance3]
+    df = df[df['Alliance'].isin(comparison_alliances)]
     
     # Date range filter
     df['date'] = df['snapshot_date'].dt.date
@@ -216,11 +222,8 @@ def main():
 
     # Percentage of Nations with Empty Trade Slots ---
     with st.expander("% of Nations with Empty Trade Slots Over Time"):
-        # Group total nations per snapshot_date and Alliance
         total_nations = df.groupby(['snapshot_date', 'Alliance']).agg(total_nations=('Nation ID', 'count')).reset_index()
-        # Group nations with empty slots (> 0)
         empty_nations = df[df['Empty Slots Count'] > 0].groupby(['snapshot_date', 'Alliance']).agg(empty_nations=('Nation ID', 'count')).reset_index()
-        # Merge the two groups to compute the ratio
         ratio_df = pd.merge(total_nations, empty_nations, on=['snapshot_date', 'Alliance'], how='left')
         ratio_df['empty_nations'] = ratio_df['empty_nations'].fillna(0)
         ratio_df['percent_empty'] = (ratio_df['empty_nations'] / ratio_df['total_nations']) * 100
