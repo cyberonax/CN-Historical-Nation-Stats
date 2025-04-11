@@ -185,6 +185,39 @@ def altair_individual_metric_chart(df, metric, title, show_ruler_on_hover=True):
         
     return chart
 
+def compute_growth(df, metric):
+    """
+    Computes the per-day growth for a given metric for each nation.
+    For each Nation ID and Ruler Name, it calculates:
+       (last_value - first_value) / (number_of_days between last_date and first_date)
+    If the snapshot dates are the same, the growth is set to 0.
+    
+    Returns a DataFrame with columns: Nation ID, Ruler Name, and '{metric} Growth Per Day'.
+    """
+    # Ensure the data is sorted by date to get the correct first and last snapshots.
+    df_sorted = df.sort_values("date")
+    
+    # Group by Nation ID and Ruler Name and aggregate the first and last values and dates.
+    growth_df = df_sorted.groupby(["Nation ID", "Ruler Name"]).agg(
+        first_date=("date", "first"),
+        last_date=("date", "last"),
+        first_val=(metric, "first"),
+        last_val=(metric, "last")
+    ).reset_index()
+    
+    # Calculate the number of days between the first and last snapshot.
+    growth_df["delta_days"] = (pd.to_datetime(growth_df["last_date"]) - pd.to_datetime(growth_df["first_date"])).dt.days
+    
+    # Calculate daily growth; if delta_days is zero, set growth to 0 to avoid division by zero.
+    growth_df["daily_growth"] = (growth_df["last_val"] - growth_df["first_val"]) / growth_df["delta_days"].replace(0, 1)
+    growth_df.loc[growth_df["delta_days"] == 0, "daily_growth"] = 0
+    
+    # Rename the column to the desired format.
+    growth_df = growth_df[["Nation ID", "Ruler Name", "daily_growth"]].rename(
+        columns={"daily_growth": f"{metric} Growth Per Day"}
+    )
+    return growth_df
+    
 ##############################
 # STREAMLIT APP
 ##############################
@@ -448,7 +481,6 @@ def main():
                 )
                 st.markdown("#### All Time Average Daily Inactivity per Nation")
                 st.dataframe(avg_activity)
-                st.caption("Only inactive nations are shown.")
         
         # (b) Empty Trade Slots Over Time
         with st.expander("Empty Trade Slots Over Time"):
@@ -469,26 +501,66 @@ def main():
         # (c) Technology Over Time
         if 'Technology' in df_indiv.columns:
             with st.expander("Technology Over Time"):
-                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Technology']), "Technology", "Technology", show_ruler_on_hover=show_hover)
+                chart = altair_individual_metric_chart(
+                    df_indiv.dropna(subset=['Technology']),
+                    "Technology",
+                    "Technology",
+                    show_ruler_on_hover=show_hover
+                )
                 st.altair_chart(chart, use_container_width=True)
+                
+                # Display Technology Growth Per Day Table.
+                tech_growth_df = compute_growth(df_indiv.dropna(subset=['Technology']), "Technology")
+                st.markdown("#### Technology Growth Per Day")
+                st.dataframe(tech_growth_df)
         
         # (d) Infrastructure Over Time
         if 'Infrastructure' in df_indiv.columns:
             with st.expander("Infrastructure Over Time"):
-                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Infrastructure']), "Infrastructure", "Infrastructure", show_ruler_on_hover=show_hover)
+                chart = altair_individual_metric_chart(
+                    df_indiv.dropna(subset=['Infrastructure']),
+                    "Infrastructure",
+                    "Infrastructure",
+                    show_ruler_on_hover=show_hover
+                )
                 st.altair_chart(chart, use_container_width=True)
+                
+                # Display Infrastructure Growth Per Day Table.
+                infra_growth_df = compute_growth(df_indiv.dropna(subset=['Infrastructure']), "Infrastructure")
+                st.markdown("#### Infrastructure Growth Per Day")
+                st.dataframe(infra_growth_df)
         
         # (e) Base Land Over Time
         if 'Base Land' in df_indiv.columns:
             with st.expander("Base Land Over Time"):
-                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Base Land']), "Base Land", "Base Land", show_ruler_on_hover=show_hover)
+                chart = altair_individual_metric_chart(
+                    df_indiv.dropna(subset=['Base Land']),
+                    "Base Land",
+                    "Base Land",
+                    show_ruler_on_hover=show_hover
+                )
                 st.altair_chart(chart, use_container_width=True)
+                
+                # Display Base Land Growth Per Day Table.
+                base_land_growth_df = compute_growth(df_indiv.dropna(subset=['Base Land']), "Base Land")
+                st.markdown("#### Base Land Growth Per Day")
+                st.dataframe(base_land_growth_df)
         
         # (f) Strength Over Time
         if 'Strength' in df_indiv.columns:
             with st.expander("Strength Over Time"):
-                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['Strength']), "Strength", "Strength", show_ruler_on_hover=show_hover)
+                chart = altair_individual_metric_chart(
+                    df_indiv.dropna(subset=['Strength']),
+                    "Strength",
+                    "Strength",
+                    show_ruler_on_hover=show_hover
+                )
                 st.altair_chart(chart, use_container_width=True)
+                
+                # Display Strength Growth Per Day Table.
+                strength_growth_df = compute_growth(df_indiv.dropna(subset=['Strength']), "Strength")
+                st.markdown("#### Strength Growth Per Day")
+                st.dataframe(strength_growth_df)
         
         # (g) Attacking Casualties Over Time
         if 'Attacking Casualties' in df_indiv.columns:
