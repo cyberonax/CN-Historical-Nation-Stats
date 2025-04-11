@@ -4,7 +4,7 @@ permissions:
   contents: write
 
 on:
-  workflow_dispatch:  # Allows manual triggering.
+  workflow_dispatch:
   schedule:
     - cron: "0 0 * * *"  # Runs daily at midnight UTC
 
@@ -21,11 +21,13 @@ jobs:
         with:
           python-version: '3.8'
 
-      - name: Install dependencies
-        run: pip install -r downloader/requirements.txt
+      - name: Install downloader dependencies
+        working-directory: downloader
+        run: pip install -r requirements.txt
 
       - name: Run download script
-        run: python downloader/cn-historical-data-downloader.py
+        working-directory: downloader
+        run: python your_zip_downloader.py
 
       - name: Commit new downloads
         env:
