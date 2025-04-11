@@ -128,7 +128,7 @@ def main():
     # Sidebar Filters: Create a dropdown with available alliances.
     st.sidebar.header("Filters")
     alliances = sorted(df['Alliance'].dropna().unique())
-    default_index = alliances.index("Freehold of the Wolves") if "Freehold of the Wolves" in alliances else 0
+    default_index = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
     selected_alliance = st.sidebar.selectbox("Select Alliance", options=alliances, index=default_index)
     df = df[df['Alliance'] == selected_alliance]
     
