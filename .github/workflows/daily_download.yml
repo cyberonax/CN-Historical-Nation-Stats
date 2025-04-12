@@ -34,9 +34,9 @@ jobs:
         run: |
           # Check if the folder exists in the downloader folder.
           if [ -d downloader/downloaded_zips ]; then
-              # Move it to the repository root.
-              mv downloader/downloaded_zips ./downloaded_zips
-              echo "Moved downloaded_zips folder to repository root."
+              # Move all files from downloader/downloaded_zips to the repository root downloaded_zips.
+              mv downloader/downloaded_zips/* ./downloaded_zips/ 2>/dev/null || true
+              echo "Moved contents of downloaded_zips folder to repository root."
           else
               echo "No downloaded_zips folder found in downloader."
           fi
