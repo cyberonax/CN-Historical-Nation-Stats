@@ -6,7 +6,8 @@ permissions:
 on:
   workflow_dispatch:  # Allows manual triggering.
   schedule:
-    - cron: "0 0 * * *"  # Runs daily at midnight UTC
+    - cron: "0 0 * * *"   # Runs daily at midnight UTC.
+    - cron: "0 12 * * *"  # Runs daily at 12pm (noon) UTC.
 
 jobs:
   download_job:
