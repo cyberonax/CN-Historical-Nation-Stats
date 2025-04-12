@@ -44,20 +44,32 @@ def download_zip(url, save_path):
 # MAIN EXECUTION (Single Run)
 # -----------------------
 def main():
-    now = datetime.now()
+    # Define the dates to check: today's date and the day before.
+    today = datetime.now()
+    yesterday = today - timedelta(days=1)
+    dates_to_check = [today, yesterday]
+
     for zip_id in ZIP_IDS:
-        url = construct_url(now, zip_id)
-        file_name = url.split("/")[-1]  # Extract filename from the URL
-        local_path = LOCAL_DIR / file_name
+        file_downloaded = False  # Flag to exit early if a file is found and downloaded.
+        for date_obj in dates_to_check:
+            url = construct_url(date_obj, zip_id)
+            file_name = url.split("/")[-1]  # Extract filename from the URL
+            local_path = LOCAL_DIR / file_name
 
-        if file_already_in_repo(file_name):
-            print(f"File already exists in the repository: {file_name}")
-            continue
+            if file_already_in_repo(file_name):
+                print(f"File already exists in the repository: {file_name}")
+                file_downloaded = True
+                break  # Skip checking further dates for this ZIP ID.
 
-        if download_zip(url, local_path):
-            print(f"Saved file: {local_path}")
-        else:
-            print(f"No file downloaded for: {file_name}")
+            if download_zip(url, local_path):
+                print(f"Saved file: {local_path}")
+                file_downloaded = True
+                break  # Successful download, so exit the loop for this ZIP ID.
+            else:
+                print(f"No file downloaded for: {file_name}")
+
+        if not file_downloaded:
+            print(f"Could not download any file for ZIP ID: {zip_id} from today or yesterday.")
 
 if __name__ == '__main__':
     main()
