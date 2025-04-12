@@ -1,1 +1,2 @@
-Historical timeline overview of CN nation stats
+# CN Nation Stats
+Tracks CN nation stats over time
