@@ -7,7 +7,7 @@ from pathlib import Path
 # CONFIGURATION
 # -----------------------
 BASE_URL = "https://www.cybernations.net/assets/CyberNations_SE_Nation_Stats_"
-ZIP_IDS = ["510001", "510002"]
+ZIP_IDS = ["525001", "525002"]
 
 # Directory that is tracked by your repository (e.g., "downloaded_zips" inside your repo)
 LOCAL_DIR = Path("./downloaded_zips")
@@ -53,7 +53,8 @@ def main():
         file_downloaded = False  # Flag to exit early if a file is found and downloaded.
         for date_obj in dates_to_check:
             url = construct_url(date_obj, zip_id)
-            file_name = url.split("/")[-1]  # Extract filename from the URL
+            # Extract just the file name to prevent creating nested directories
+            file_name = os.path.basename(url)
             local_path = LOCAL_DIR / file_name
 
             if file_already_in_repo(file_name):
