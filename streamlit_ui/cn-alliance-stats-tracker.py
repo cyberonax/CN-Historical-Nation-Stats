@@ -248,7 +248,8 @@ def main():
         st.error("No data loaded. Please check the 'downloaded_zips' folder.")
         return
     df_raw['snapshot_date'] = pd.to_datetime(df_raw['snapshot_date'])
-    df_raw['date'] = df_raw['snapshot_date'].dt.date
+    # Preserve the full timestamp including hour for accurate snapshot differentiation.
+    df_raw['date'] = df_raw['snapshot_date']
 
     # Ensure key numeric metrics are converted properly.
     numeric_cols = ['Technology', 'Infrastructure', 'Base Land', 'Strength', 'Attacking Casualties', 'Defensive Casualties']
@@ -308,7 +309,8 @@ def main():
         
         # Aggregate data by alliance.
         agg_df = aggregate_by_alliance(df_agg)
-        agg_df['date'] = agg_df['snapshot_date'].dt.date
+        # Use the full snapshot_date (with hour) so each half-day snapshot remains unique.
+        agg_df['date'] = agg_df['snapshot_date']
         
         # Compute averages by dividing totals by the number of nations.
         agg_df['avg_attacking_casualties'] = agg_df['Attacking Casualties'] / agg_df['nation_count']
@@ -343,7 +345,8 @@ def main():
         # 3. Total Empty Trade Slots by Alliance Over Time
         with st.expander("Total Empty Trade Slots by Alliance Over Time"):
             empty_agg = df_agg.groupby(['snapshot_date', 'Alliance'])['Empty Slots Count'].sum().reset_index()
-            empty_agg['date'] = empty_agg['snapshot_date'].dt.date
+            # Keep full timestamp for uniqueness.
+            empty_agg['date'] = empty_agg['snapshot_date']
             pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
             chart = altair_line_chart_from_pivot(pivot_empty_total, "Empty Slots Count", comparison_alliances)
             st.altair_chart(chart, use_container_width=True)
@@ -355,7 +358,7 @@ def main():
             ratio_df = pd.merge(total_nations, empty_nations, on=['snapshot_date', 'Alliance'], how='left')
             ratio_df['empty_nations'] = ratio_df['empty_nations'].fillna(0)
             ratio_df['percent_empty'] = (ratio_df['empty_nations'] / ratio_df['total_nations']) * 100
-            ratio_df['date'] = ratio_df['snapshot_date'].dt.date
+            ratio_df['date'] = ratio_df['snapshot_date']
             pivot_ratio = ratio_df.pivot(index='date', columns='Alliance', values='percent_empty')
             chart = altair_line_chart_from_pivot(pivot_ratio, "percent_empty", comparison_alliances)
             st.altair_chart(chart, use_container_width=True)
