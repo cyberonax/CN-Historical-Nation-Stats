@@ -266,7 +266,37 @@ def compute_growth(df, metric):
         columns={"daily_growth": f"{metric} Growth Per Day"}
     )
     return growth_df
-    
+
+# New helper functions for aggregated alliance metrics
+
+def current_alliance_stats(agg_df, metric, metric_label):
+    """
+    For each alliance, get the latest (current) value of the given metric
+    based on the most recent snapshot.
+    Returns a DataFrame with Alliance and the metric labelled with metric_label.
+    """
+    current = agg_df.sort_values('date').groupby('Alliance').last().reset_index()
+    table = current[['Alliance', metric]].rename(columns={metric: metric_label})
+    return table
+
+def compute_alliance_growth(agg_df, metric):
+    """
+    For each alliance, compute the per-day growth for the given metric
+    by comparing the first and last snapshots.
+    Returns a DataFrame with Alliance and the growth rate per day.
+    """
+    growth_list = []
+    for alliance, group in agg_df.groupby('Alliance'):
+        group = group.sort_values('date')
+        first_date = group.iloc[0]['date']
+        last_date = group.iloc[-1]['date']
+        first_value = group.iloc[0][metric]
+        last_value = group.iloc[-1][metric]
+        delta_days = (last_date - first_date).days if (last_date - first_date).days != 0 else 1
+        growth_rate = (last_value - first_value) / delta_days
+        growth_list.append({'Alliance': alliance, f"{metric} Growth Per Day": growth_rate})
+    return pd.DataFrame(growth_list)
+
 ##############################
 # STREAMLIT APP
 ##############################
@@ -367,8 +397,15 @@ def main():
             pivot_count = agg_df.pivot(index='date', columns='Alliance', values='nation_count')
             chart = altair_line_chart_from_pivot(pivot_count, "nation_count", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
+            # Display current and growth tables for Nation Count.
+            current_nation_count = current_alliance_stats(agg_df, 'nation_count', 'Current Nation Count')
+            st.markdown("#### Current Nation Count by Alliance")
+            st.dataframe(current_nation_count)
+            nation_count_growth = compute_alliance_growth(agg_df, 'nation_count')
+            st.markdown("#### Average Nation Count Growth Rate Per Day")
+            st.dataframe(nation_count_growth)
         
-        # 2. Nation Activity Distribution Over Time (if available)
+        # 2. Average Alliance Inactivity Over Time (Days)
         if 'activity_score' in df_agg.columns:
             with st.expander("Average Alliance Inactivity Over Time (Days)"):
                 activity_grouped = df_agg.dropna(subset=['activity_score']).groupby(['date', 'Alliance'])['activity_score'].mean().reset_index()
@@ -376,15 +413,30 @@ def main():
                 chart = altair_line_chart_from_pivot(pivot_activity, "activity_score", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
                 st.caption("Lower scores indicate more recent activity.")
+                # Current Average Inactivity (from the most recent snapshot)
+                current_inactivity = df_agg.dropna(subset=['activity_score']).sort_values('date').groupby('Alliance').last().reset_index()[['Alliance', 'activity_score']].rename(columns={'activity_score': 'Current Average Inactivity (Days)'})
+                st.markdown("#### Current Average Alliance Inactivity (Days)")
+                st.dataframe(current_inactivity)
+                # All Time Average Inactivity
+                all_time_inactivity = df_agg.dropna(subset=['activity_score']).groupby('Alliance')['activity_score'].mean().reset_index().rename(columns={'activity_score': 'All Time Average Inactivity (Days)'})
+                st.markdown("#### All Time Average Alliance Inactivity (Days)")
+                st.dataframe(all_time_inactivity)
         
         # 3. Total Empty Trade Slots by Alliance Over Time
         with st.expander("Total Empty Trade Slots by Alliance Over Time"):
             empty_agg = df_agg.groupby(['snapshot_date', 'Alliance'])['Empty Slots Count'].sum().reset_index()
-            # Keep full timestamp for uniqueness.
             empty_agg['date'] = empty_agg['snapshot_date']
             pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
             chart = altair_line_chart_from_pivot(pivot_empty_total, "Empty Slots Count", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
+            # Current Total Empty Trade Slots
+            current_empty_total = empty_agg.sort_values('date').groupby('Alliance').last().reset_index()[['Alliance', 'Empty Slots Count']].rename(columns={'Empty Slots Count': 'Current Total Empty Trade Slots'})
+            st.markdown("#### Current Total Empty Trade Slots by Alliance")
+            st.dataframe(current_empty_total)
+            # All Time Average Empty Trade Slots
+            avg_empty_total = empty_agg.groupby('Alliance')['Empty Slots Count'].mean().reset_index().rename(columns={'Empty Slots Count': 'All Time Average Empty Trade Slots'})
+            st.markdown("#### All Time Average Empty Trade Slots by Alliance")
+            st.dataframe(avg_empty_total)
         
         # 4. % of Nations with Empty Trade Slots Over Time
         with st.expander("% of Nations with Empty Trade Slots Over Time"):
@@ -397,6 +449,14 @@ def main():
             pivot_ratio = ratio_df.pivot(index='date', columns='Alliance', values='percent_empty')
             chart = altair_line_chart_from_pivot(pivot_ratio, "percent_empty", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
+            # Current % of Nations with Empty Trade Slots
+            current_empty_percent = ratio_df.sort_values('date').groupby('Alliance').last().reset_index()[['Alliance', 'percent_empty']].rename(columns={'percent_empty': 'Current % of Nations with Empty Trade Slots'})
+            st.markdown("#### Current % of Nations with Empty Trade Slots by Alliance")
+            st.dataframe(current_empty_percent)
+            # All Time Average % of Nations with Empty Trade Slots
+            avg_empty_percent = ratio_df.groupby('Alliance')['percent_empty'].mean().reset_index().rename(columns={'percent_empty': 'All Time Average % of Empty Trade Slots'})
+            st.markdown("#### All Time Average % of Nations with Empty Trade Slots by Alliance")
+            st.dataframe(avg_empty_percent)
         
         # 5. Total Technology by Alliance Over Time
         if 'Technology' in agg_df.columns:
@@ -404,12 +464,30 @@ def main():
                 pivot_tech = agg_df.pivot(index='date', columns='Alliance', values='Technology')
                 chart = altair_line_chart_from_pivot(pivot_tech, "Technology", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
+                # Current Total Technology
+                current_total_tech = current_alliance_stats(agg_df, 'Technology', 'Current Total Technology')
+                st.markdown("#### Current Total Technology by Alliance")
+                st.dataframe(current_total_tech)
+                # Technology Growth Rate Per Day
+                tech_growth = compute_alliance_growth(agg_df, 'Technology')
+                tech_growth.rename(columns={"Technology Growth Per Day": "Technology Growth Rate Per Day"}, inplace=True)
+                st.markdown("#### Technology Growth Rate Per Day")
+                st.dataframe(tech_growth)
         
         # 6. Average Technology by Alliance Over Time
         with st.expander("Average Technology by Alliance Over Time"):
             pivot_avg_tech = agg_df.pivot(index='date', columns='Alliance', values='avg_technology')
             chart = altair_line_chart_from_pivot(pivot_avg_tech, "avg_technology", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
+            # Current Average Technology
+            current_avg_tech = current_alliance_stats(agg_df, 'avg_technology', 'Current Average Technology')
+            st.markdown("#### Current Average Technology by Alliance")
+            st.dataframe(current_avg_tech)
+            # Average Technology Growth Rate Per Day
+            avg_tech_growth = compute_alliance_growth(agg_df, 'avg_technology')
+            avg_tech_growth.rename(columns={"avg_technology Growth Per Day": "Average Technology Growth Rate Per Day"}, inplace=True)
+            st.markdown("#### Average Technology Growth Rate Per Day")
+            st.dataframe(avg_tech_growth)
         
         # 7. Total Infrastructure by Alliance Over Time
         if 'Infrastructure' in agg_df.columns:
@@ -417,12 +495,30 @@ def main():
                 pivot_infra = agg_df.pivot(index='date', columns='Alliance', values='Infrastructure')
                 chart = altair_line_chart_from_pivot(pivot_infra, "Infrastructure", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
+                # Current Total Infrastructure
+                current_total_infra = current_alliance_stats(agg_df, 'Infrastructure', 'Current Total Infrastructure')
+                st.markdown("#### Current Total Infrastructure by Alliance")
+                st.dataframe(current_total_infra)
+                # Infrastructure Growth Rate Per Day
+                infra_growth = compute_alliance_growth(agg_df, 'Infrastructure')
+                infra_growth.rename(columns={"Infrastructure Growth Per Day": "Infrastructure Growth Rate Per Day"}, inplace=True)
+                st.markdown("#### Infrastructure Growth Rate Per Day")
+                st.dataframe(infra_growth)
         
         # 8. Average Infrastructure by Alliance Over Time
         with st.expander("Average Infrastructure by Alliance Over Time"):
             pivot_avg_infra = agg_df.pivot(index='date', columns='Alliance', values='avg_infrastructure')
             chart = altair_line_chart_from_pivot(pivot_avg_infra, "avg_infrastructure", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
+            # Current Average Infrastructure
+            current_avg_infra = current_alliance_stats(agg_df, 'avg_infrastructure', 'Current Average Infrastructure')
+            st.markdown("#### Current Average Infrastructure by Alliance")
+            st.dataframe(current_avg_infra)
+            # Average Infrastructure Growth Rate Per Day
+            avg_infra_growth = compute_alliance_growth(agg_df, 'avg_infrastructure')
+            avg_infra_growth.rename(columns={"avg_infrastructure Growth Per Day": "Average Infrastructure Growth Rate Per Day"}, inplace=True)
+            st.markdown("#### Average Infrastructure Growth Rate Per Day")
+            st.dataframe(avg_infra_growth)
         
         # 9. Total Base Land by Alliance Over Time
         if 'Base Land' in agg_df.columns:
@@ -430,12 +526,30 @@ def main():
                 pivot_base_land = agg_df.pivot(index='date', columns='Alliance', values='Base Land')
                 chart = altair_line_chart_from_pivot(pivot_base_land, "Base Land", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
+                # Current Total Base Land
+                current_total_base_land = current_alliance_stats(agg_df, 'Base Land', 'Current Total Base Land')
+                st.markdown("#### Current Total Base Land by Alliance")
+                st.dataframe(current_total_base_land)
+                # Total Base Land Growth Rate Per Day
+                base_land_growth = compute_alliance_growth(agg_df, 'Base Land')
+                base_land_growth.rename(columns={"Base Land Growth Per Day": "Total Base Land Growth Rate Per Day"}, inplace=True)
+                st.markdown("#### Total Base Land Growth Rate Per Day")
+                st.dataframe(base_land_growth)
         
         # 10. Average Base Land by Alliance Over Time
         with st.expander("Average Base Land by Alliance Over Time"):
             pivot_avg_base_land = agg_df.pivot(index='date', columns='Alliance', values='avg_base_land')
             chart = altair_line_chart_from_pivot(pivot_avg_base_land, "avg_base_land", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
+            # Current Average Base Land
+            current_avg_base_land = current_alliance_stats(agg_df, 'avg_base_land', 'Current Average Base Land')
+            st.markdown("#### Current Average Base Land by Alliance")
+            st.dataframe(current_avg_base_land)
+            # Average Base Land Growth Rate Per Day
+            avg_base_land_growth = compute_alliance_growth(agg_df, 'avg_base_land')
+            avg_base_land_growth.rename(columns={"avg_base_land Growth Per Day": "Average Base Land Growth Rate Per Day"}, inplace=True)
+            st.markdown("#### Average Base Land Growth Rate Per Day")
+            st.dataframe(avg_base_land_growth)
         
         # 11. Total Strength by Alliance Over Time
         if 'Strength' in agg_df.columns:
@@ -443,12 +557,30 @@ def main():
                 pivot_strength = agg_df.pivot(index='date', columns='Alliance', values='Strength')
                 chart = altair_line_chart_from_pivot(pivot_strength, "Strength", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
+                # Current Total Strength
+                current_total_strength = current_alliance_stats(agg_df, 'Strength', 'Current Total Strength')
+                st.markdown("#### Current Total Strength by Alliance")
+                st.dataframe(current_total_strength)
+                # Total Strength Growth Rate Per Day
+                strength_growth = compute_alliance_growth(agg_df, 'Strength')
+                strength_growth.rename(columns={"Strength Growth Per Day": "Total Strength Growth Rate Per Day"}, inplace=True)
+                st.markdown("#### Total Strength Growth Rate Per Day")
+                st.dataframe(strength_growth)
         
         # 12. Average Strength by Alliance Over Time
         with st.expander("Average Strength by Alliance Over Time"):
             pivot_avg_strength = agg_df.pivot(index='date', columns='Alliance', values='avg_strength')
             chart = altair_line_chart_from_pivot(pivot_avg_strength, "avg_strength", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
+            # Current Average Strength
+            current_avg_strength = current_alliance_stats(agg_df, 'avg_strength', 'Current Average Strength')
+            st.markdown("#### Current Average Strength by Alliance")
+            st.dataframe(current_avg_strength)
+            # Average Strength Growth Rate Per Day
+            avg_strength_growth = compute_alliance_growth(agg_df, 'avg_strength')
+            avg_strength_growth.rename(columns={"avg_strength Growth Per Day": "Average Strength Growth Rate Per Day"}, inplace=True)
+            st.markdown("#### Average Strength Growth Rate Per Day")
+            st.dataframe(avg_strength_growth)
         
         # 13. Total Attacking Casualties by Alliance Over Time
         if 'Attacking Casualties' in agg_df.columns:
