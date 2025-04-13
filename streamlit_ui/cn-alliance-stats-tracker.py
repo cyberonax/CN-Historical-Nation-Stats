@@ -402,7 +402,8 @@ def main():
             st.markdown("#### Current Nation Count by Alliance")
             st.dataframe(current_nation_count)
             nation_count_growth = compute_alliance_growth(agg_df, 'nation_count')
-            st.markdown("#### Average Nation Count Growth Rate Per Day")
+            nation_count_growth.rename(columns={"nation_count Growth Per Day": "Nation Count Growth Rate Per Day"}, inplace=True)
+            st.markdown("#### Nation Count Growth Rate Per Day")
             st.dataframe(nation_count_growth)
         
         # 2. Average Alliance Inactivity Over Time (Days)
@@ -413,8 +414,10 @@ def main():
                 chart = altair_line_chart_from_pivot(pivot_activity, "activity_score", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
                 st.caption("Lower scores indicate more recent activity.")
-                # Current Average Inactivity (from the most recent snapshot)
-                current_inactivity = df_agg.dropna(subset=['activity_score']).sort_values('date').groupby('Alliance').last().reset_index()[['Alliance', 'activity_score']].rename(columns={'activity_score': 'Current Average Inactivity (Days)'})
+                # Current Average Inactivity: for each alliance, use the latest snapshot and average the activity scores.
+                current_inactivity = df_agg.dropna(subset=['activity_score']).groupby('Alliance').apply(
+                    lambda x: x[x['date'] == x['date'].max()]['activity_score'].mean()
+                ).reset_index(name='Current Average Inactivity (Days)')
                 st.markdown("#### Current Average Alliance Inactivity (Days)")
                 st.dataframe(current_inactivity)
                 # All Time Average Inactivity
@@ -588,26 +591,62 @@ def main():
                 pivot_attack = agg_df.pivot(index='date', columns='Alliance', values='Attacking Casualties')
                 chart = altair_line_chart_from_pivot(pivot_attack, "Attacking Casualties", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
-        
+                # Current Total Attacking Casualties
+                current_attack = current_alliance_stats(agg_df, 'Attacking Casualties', 'Current Total Attacking Casualties')
+                st.markdown("#### Current Total Attacking Casualties by Alliance")
+                st.dataframe(current_attack)
+                # Attacking Casualties Growth Rate Per Day
+                attack_growth = compute_alliance_growth(agg_df, 'Attacking Casualties')
+                attack_growth.rename(columns={"Attacking Casualties Growth Per Day": "Attacking Casualties Growth Rate Per Day"}, inplace=True)
+                st.markdown("#### Attacking Casualties Growth Rate Per Day")
+                st.dataframe(attack_growth)
+
         # 14. Average Attacking Casualties by Alliance Over Time
         with st.expander("Average Attacking Casualties by Alliance Over Time"):
             pivot_avg_attack = agg_df.pivot(index='date', columns='Alliance', values='avg_attacking_casualties')
             chart = altair_line_chart_from_pivot(pivot_avg_attack, "avg_attacking_casualties", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
-        
+            # Current Average Attacking Casualties
+            current_avg_attack = current_alliance_stats(agg_df, 'avg_attacking_casualties', 'Current Average Attacking Casualties')
+            st.markdown("#### Current Average Attacking Casualties by Alliance")
+            st.dataframe(current_avg_attack)
+            # Average Attacking Casualties Growth Rate Per Day
+            avg_attack_growth = compute_alliance_growth(agg_df, 'avg_attacking_casualties')
+            avg_attack_growth.rename(columns={"avg_attacking_casualties Growth Per Day": "Average Attacking Casualties Growth Rate Per Day"}, inplace=True)
+            st.markdown("#### Average Attacking Casualties Growth Rate Per Day")
+            st.dataframe(avg_attack_growth)
+
         # 15. Total Defensive Casualties by Alliance Over Time
         if 'Defensive Casualties' in agg_df.columns:
             with st.expander("Total Defensive Casualties by Alliance Over Time"):
                 pivot_defense = agg_df.pivot(index='date', columns='Alliance', values='Defensive Casualties')
                 chart = altair_line_chart_from_pivot(pivot_defense, "Defensive Casualties", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
-        
+                # Current Total Defensive Casualties
+                current_defense = current_alliance_stats(agg_df, 'Defensive Casualties', 'Current Total Defensive Casualties')
+                st.markdown("#### Current Total Defensive Casualties by Alliance")
+                st.dataframe(current_defense)
+                # Defensive Casualties Growth Rate Per Day
+                defense_growth = compute_alliance_growth(agg_df, 'Defensive Casualties')
+                defense_growth.rename(columns={"Defensive Casualties Growth Per Day": "Defensive Casualties Growth Rate Per Day"}, inplace=True)
+                st.markdown("#### Defensive Casualties Growth Rate Per Day")
+                st.dataframe(defense_growth)
+
         # 16. Average Defensive Casualties by Alliance Over Time
         with st.expander("Average Defensive Casualties by Alliance Over Time"):
             pivot_avg_defense = agg_df.pivot(index='date', columns='Alliance', values='avg_defensive_casualties')
             chart = altair_line_chart_from_pivot(pivot_avg_defense, "avg_defensive_casualties", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
-    
+            # Current Average Defensive Casualties
+            current_avg_defense = current_alliance_stats(agg_df, 'avg_defensive_casualties', 'Current Average Defensive Casualties')
+            st.markdown("#### Current Average Defensive Casualties by Alliance")
+            st.dataframe(current_avg_defense)
+            # Average Defensive Casualties Growth Rate Per Day
+            avg_defense_growth = compute_alliance_growth(agg_df, 'avg_defensive_casualties')
+            avg_defense_growth.rename(columns={"avg_defensive_casualties Growth Per Day": "Average Defensive Casualties Growth Rate Per Day"}, inplace=True)
+            st.markdown("#### Average Defensive Casualties Growth Rate Per Day")
+            st.dataframe(avg_defense_growth)
+
     ####################################################
     # TAB 2: Individual Nation Metrics Over Time
     ####################################################
