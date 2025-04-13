@@ -667,20 +667,20 @@ def main():
         # Add an option to show the Ruler Name on hover.
         show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option")
         
-        # --- NEW FILTERING LOGIC ---
-        # Instead of filtering by the alliance column in the raw data, determine which nations currently belong to the selected alliance.
-        # First, filter out rows with missing alliances.
-        df_valid = df_raw[df_raw["Alliance"].notnull()].copy()
-        # Compute each nation's most recent snapshot from the valid data.
-        latest_statuses = df_valid.sort_values("date").groupby("Nation ID").last().reset_index()
-        # Identify the Nation IDs whose latest alliance equals the selected alliance.
-        current_nation_ids = latest_statuses[latest_statuses["Alliance"] == selected_alliance_ind]["Nation ID"].unique()
-        # Now filter the individual nation data to include all snapshots for nations that are currently in the selected alliance.
-        df_indiv = df_raw[df_raw["Nation ID"].isin(current_nation_ids)].copy()
+        # Filter raw data for the selected alliance.
+        # Initially filter based on historical data.
+        df_indiv = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
         
-        # If any Nation ID is additionally selected from the sidebar, further filter the data.
+        # If any Nation ID is selected, further filter the data.
         if selected_nation_ids:
             df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
+        
+        # *** NEW FILTER ***
+        # Filter out nation rulers that are not currently in the selected alliance in the latest snapshot.
+        # For nations in previous snapshots that no longer appear in the current snapshot, remove them.
+        latest_nations = df_raw.sort_values('date').groupby('Nation ID').last().reset_index()
+        valid_nation_ids = latest_nations[(latest_nations['Alliance'] == selected_alliance_ind) & (latest_nations['Alliance'].notnull())]["Nation ID"].unique()
+        df_indiv = df_indiv[df_indiv["Nation ID"].isin(valid_nation_ids)]
         
         # (Optional) Apply a date range filter for individual nation charts.
         min_date_ind = df_indiv['date'].min()
