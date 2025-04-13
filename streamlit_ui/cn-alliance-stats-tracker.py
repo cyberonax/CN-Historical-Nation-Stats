@@ -818,6 +818,10 @@ def main():
                     show_ruler_on_hover=show_hover
                 )
                 st.altair_chart(chart, use_container_width=True)
+                # Display Attacking Casualties Growth Rate Per Day Table.
+                attack_growth_df = compute_growth(df_indiv.dropna(subset=['Attacking Casualties']), "Attacking Casualties")
+                st.markdown("#### Attacking Casualties Growth Rate Per Day")
+                st.dataframe(attack_growth_df)
         
         # (h) Defensive Casualties Over Time
         if 'Defensive Casualties' in df_indiv.columns:
@@ -829,6 +833,10 @@ def main():
                     show_ruler_on_hover=show_hover
                 )
                 st.altair_chart(chart, use_container_width=True)
+                # Display Defensive Casualties Growth Rate Per Day Table.
+                defense_growth_df = compute_growth(df_indiv.dropna(subset=['Defensive Casualties']), "Defensive Casualties")
+                st.markdown("#### Defensive Casualties Growth Rate Per Day")
+                st.dataframe(defense_growth_df)
 
 if __name__ == "__main__":
     main()
