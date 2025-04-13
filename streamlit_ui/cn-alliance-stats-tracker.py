@@ -672,6 +672,16 @@ def main():
         # If any Nation ID is selected, further filter the data.
         if selected_nation_ids:
             df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
+
+        # Filter out nations that are no longer currently in the selected alliance.
+        # First, get each nation’s most recent snapshot from the full dataset.
+        latest_statuses = df_raw.sort_values("date").groupby("Nation ID").last().reset_index()
+        
+        # Identify the Nation IDs whose latest (i.e. current) alliance equals the selected alliance.
+        current_nation_ids = latest_statuses[latest_statuses["Alliance"] == selected_alliance_ind]["Nation ID"]
+        
+        # Further filter the individual DataFrame to keep only those nations.
+        df_indiv = df_indiv[df_indiv["Nation ID"].isin(current_nation_ids)]
         
         # (Optional) Apply a date range filter for individual nation charts.
         min_date_ind = df_indiv['date'].min()
