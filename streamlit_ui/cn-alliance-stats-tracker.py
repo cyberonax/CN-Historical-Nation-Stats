@@ -292,7 +292,10 @@ def main():
         # Sidebar filters for aggregated charts.
         st.sidebar.header("Alliance Metrics")
         alliances = sorted(df_raw['Alliance'].dropna().unique())
-        selected_alliances = st.sidebar.multiselect("Filter by Alliance", options=alliances, default=["Freedom of The Wolves", "CLAWS", "NATO"], key="agg_multiselect")
+        # Compute the intersection of default selections with the available alliances.
+        default_defaults = ["Freedom of The Wolves", "CLAWS", "NATO"]
+        default_selection = [a for a in default_defaults if a in alliances]
+        selected_alliances = st.sidebar.multiselect("Filter by Alliance", options=alliances, default=default_selection, key="agg_multiselect")
         display_alliance_hover = st.sidebar.checkbox("Display Alliance Name on Hover", value=True, key="agg_hover")
         if not selected_alliances:
             selected_alliances = alliances
