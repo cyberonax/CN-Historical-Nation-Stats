@@ -16,8 +16,10 @@ def parse_date_from_filename(filename):
     Extract and parse the date from a filename that follows the pattern:
     "CyberNations_SE_Nation_Stats_<dateToken><zipid>.zip"
     
-    For example, from "CyberNations_SE_Nation_Stats_452025510002.zip":
-      date_token = "452025" is interpreted as month=4, day=5, year=2025.
+    For example, from "CyberNations_SE_Nation_Stats_4132025510001.zip":
+      - date_token = "4132025" is interpreted as month=4, day=13, year=2025.
+      - The zipid "510001" corresponds to the first 12 hours of the day (00:00).
+      - The zipid "510002" corresponds to the last 12 hours of the day (12:00).
       
     Returns a datetime object on success, otherwise None.
     """
@@ -26,6 +28,12 @@ def parse_date_from_filename(filename):
     if not match:
         return None
     date_token = match.group(1)
+    zip_id = match.group(2)
+    # Decide the hour offset based on the zip id.
+    # 510001 -> first 12 hours: hour=0; 510002 -> last 12 hours: hour=12.
+    hour = 0 if zip_id == "510001" else 12
+
+    # Try different possibilities for the digit splits in the date_token.
     for m_digits in [1, 2]:
         for d_digits in [1, 2]:
             if m_digits + d_digits + 4 == len(date_token):
@@ -34,7 +42,7 @@ def parse_date_from_filename(filename):
                     day = int(date_token[m_digits:m_digits+d_digits])
                     year = int(date_token[m_digits+d_digits:m_digits+d_digits+4])
                     if 1 <= month <= 12 and 1 <= day <= 31:
-                        return datetime(year, month, day)
+                        return datetime(year, month, day, hour=hour)
                 except Exception:
                     continue
     return None
