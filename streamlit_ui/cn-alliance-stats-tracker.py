@@ -138,15 +138,43 @@ def altair_line_chart_from_pivot(pivot_df, y_field, alliances, show_alliance_hov
     else:
         tooltip = ["date:T", alt.Tooltip(f"{y_field}:Q", title=y_field)]
     
-    chart = alt.Chart(df_long).mark_line().encode(
+    # Create base chart.
+    base = alt.Chart(df_long).encode(
         x=alt.X("date:T", title=""),
         y=alt.Y(f"{y_field}:Q", title=""),
-        color=alt.Color("Alliance:N", scale=color_scale, legend=alt.Legend(title="Alliance")),
-        tooltip=tooltip
-    ).properties(
-        width=700,
-        height=400
-    ).interactive()
+        color=alt.Color("Alliance:N", scale=color_scale, legend=alt.Legend(title="Alliance"))
+    )
+    line = base.mark_line()
+    
+    if show_alliance_hover:
+        # Create a nearest selection that reacts to mouse hover.
+        nearest = alt.selection(type='single', nearest=True, on='mouseover', fields=['date'], empty='none')
+        # Transparent selectors across the chart.
+        selectors = base.mark_point().encode(
+            opacity=alt.value(0)
+        ).add_selection(nearest)
+        # Points on the line that appear on hover.
+        points = line.mark_point().encode(
+            opacity=alt.condition(nearest, alt.value(1), alt.value(0))
+        )
+        # Text label to display the Alliance name.
+        text = line.mark_text(align='left', dx=5, dy=-5).encode(
+            text=alt.condition(nearest, "Alliance:N", alt.value(''))
+        )
+        layered_chart = alt.layer(line, selectors, points, text).encode(
+            tooltip=tooltip
+        ).properties(
+            width=700,
+            height=400
+        ).interactive()
+        chart = layered_chart
+    else:
+        chart = line.encode(
+            tooltip=tooltip
+        ).properties(
+            width=700,
+            height=400
+        ).interactive()
     return chart
 
 def altair_individual_metric_chart(df, metric, title, show_ruler_on_hover=True):
@@ -293,10 +321,10 @@ def main():
         st.sidebar.header("Alliance Metrics")
         alliances = sorted(df_raw['Alliance'].dropna().unique())
         # Compute the intersection of default selections with the available alliances.
-        default_defaults = ["Freedom of The Wolves", "CLAWS", "NATO"]
+        default_defaults = ["Freehold of The Wolves", "CLAWS", "NATO"]
         default_selection = [a for a in default_defaults if a in alliances]
         selected_alliances = st.sidebar.multiselect("Filter by Alliance", options=alliances, default=default_selection, key="agg_multiselect")
-        display_alliance_hover = st.sidebar.checkbox("Display Alliance Name on Hover", value=True, key="agg_hover")
+        display_alliance_hover = st.sidebar.checkbox("Display Alliance Name on hover", value=True, key="agg_hover")
         if not selected_alliances:
             selected_alliances = alliances
         
