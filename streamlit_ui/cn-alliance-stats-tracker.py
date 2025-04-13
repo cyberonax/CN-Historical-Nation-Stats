@@ -402,8 +402,8 @@ def main():
             st.markdown("#### Current Nation Count by Alliance")
             st.dataframe(current_nation_count)
             nation_count_growth = compute_alliance_growth(agg_df, 'nation_count')
-            nation_count_growth.rename(columns={"nation_count Growth Per Day": "Nation Count Growth Rate Per Day"}, inplace=True)
-            st.markdown("#### Nation Count Growth Rate Per Day")
+            nation_count_growth.rename(columns={"nation_count Growth Per Day": "Nation Count Growth Per Day"}, inplace=True)
+            st.markdown("#### Nation Count Growth Per Day")
             st.dataframe(nation_count_growth)
         
         # 2. Average Alliance Inactivity Over Time (Days)
@@ -471,10 +471,10 @@ def main():
                 current_total_tech = current_alliance_stats(agg_df, 'Technology', 'Current Total Technology')
                 st.markdown("#### Current Total Technology by Alliance")
                 st.dataframe(current_total_tech)
-                # Technology Growth Rate Per Day
+                # Technology Growth Per Day
                 tech_growth = compute_alliance_growth(agg_df, 'Technology')
-                tech_growth.rename(columns={"Technology Growth Per Day": "Technology Growth Rate Per Day"}, inplace=True)
-                st.markdown("#### Technology Growth Rate Per Day")
+                tech_growth.rename(columns={"Technology Growth Per Day": "Technology Growth Per Day"}, inplace=True)
+                st.markdown("#### Technology Growth Per Day")
                 st.dataframe(tech_growth)
         
         # 6. Average Technology by Alliance Over Time
@@ -486,10 +486,10 @@ def main():
             current_avg_tech = current_alliance_stats(agg_df, 'avg_technology', 'Current Average Technology')
             st.markdown("#### Current Average Technology by Alliance")
             st.dataframe(current_avg_tech)
-            # Average Technology Growth Rate Per Day
+            # Average Technology Growth Per Day
             avg_tech_growth = compute_alliance_growth(agg_df, 'avg_technology')
-            avg_tech_growth.rename(columns={"avg_technology Growth Per Day": "Average Technology Growth Rate Per Day"}, inplace=True)
-            st.markdown("#### Average Technology Growth Rate Per Day")
+            avg_tech_growth.rename(columns={"avg_technology Growth Per Day": "Average Technology Growth Per Day"}, inplace=True)
+            st.markdown("#### Average Technology Growth Per Day")
             st.dataframe(avg_tech_growth)
         
         # 7. Total Infrastructure by Alliance Over Time
@@ -502,10 +502,10 @@ def main():
                 current_total_infra = current_alliance_stats(agg_df, 'Infrastructure', 'Current Total Infrastructure')
                 st.markdown("#### Current Total Infrastructure by Alliance")
                 st.dataframe(current_total_infra)
-                # Infrastructure Growth Rate Per Day
+                # Infrastructure Growth Per Day
                 infra_growth = compute_alliance_growth(agg_df, 'Infrastructure')
-                infra_growth.rename(columns={"Infrastructure Growth Per Day": "Infrastructure Growth Rate Per Day"}, inplace=True)
-                st.markdown("#### Infrastructure Growth Rate Per Day")
+                infra_growth.rename(columns={"Infrastructure Growth Per Day": "Infrastructure Growth Per Day"}, inplace=True)
+                st.markdown("#### Infrastructure Growth Per Day")
                 st.dataframe(infra_growth)
         
         # 8. Average Infrastructure by Alliance Over Time
@@ -517,10 +517,10 @@ def main():
             current_avg_infra = current_alliance_stats(agg_df, 'avg_infrastructure', 'Current Average Infrastructure')
             st.markdown("#### Current Average Infrastructure by Alliance")
             st.dataframe(current_avg_infra)
-            # Average Infrastructure Growth Rate Per Day
+            # Average Infrastructure Growth Per Day
             avg_infra_growth = compute_alliance_growth(agg_df, 'avg_infrastructure')
-            avg_infra_growth.rename(columns={"avg_infrastructure Growth Per Day": "Average Infrastructure Growth Rate Per Day"}, inplace=True)
-            st.markdown("#### Average Infrastructure Growth Rate Per Day")
+            avg_infra_growth.rename(columns={"avg_infrastructure Growth Per Day": "Average Infrastructure Growth Per Day"}, inplace=True)
+            st.markdown("#### Average Infrastructure Growth Per Day")
             st.dataframe(avg_infra_growth)
         
         # 9. Total Base Land by Alliance Over Time
@@ -533,10 +533,10 @@ def main():
                 current_total_base_land = current_alliance_stats(agg_df, 'Base Land', 'Current Total Base Land')
                 st.markdown("#### Current Total Base Land by Alliance")
                 st.dataframe(current_total_base_land)
-                # Total Base Land Growth Rate Per Day
+                # Total Base Land Growth Per Day
                 base_land_growth = compute_alliance_growth(agg_df, 'Base Land')
-                base_land_growth.rename(columns={"Base Land Growth Per Day": "Total Base Land Growth Rate Per Day"}, inplace=True)
-                st.markdown("#### Total Base Land Growth Rate Per Day")
+                base_land_growth.rename(columns={"Base Land Growth Per Day": "Total Base Land Growth Per Day"}, inplace=True)
+                st.markdown("#### Total Base Land Growth Per Day")
                 st.dataframe(base_land_growth)
         
         # 10. Average Base Land by Alliance Over Time
@@ -548,10 +548,10 @@ def main():
             current_avg_base_land = current_alliance_stats(agg_df, 'avg_base_land', 'Current Average Base Land')
             st.markdown("#### Current Average Base Land by Alliance")
             st.dataframe(current_avg_base_land)
-            # Average Base Land Growth Rate Per Day
+            # Average Base Land Growth Per Day
             avg_base_land_growth = compute_alliance_growth(agg_df, 'avg_base_land')
-            avg_base_land_growth.rename(columns={"avg_base_land Growth Per Day": "Average Base Land Growth Rate Per Day"}, inplace=True)
-            st.markdown("#### Average Base Land Growth Rate Per Day")
+            avg_base_land_growth.rename(columns={"avg_base_land Growth Per Day": "Average Base Land Growth Per Day"}, inplace=True)
+            st.markdown("#### Average Base Land Growth Per Day")
             st.dataframe(avg_base_land_growth)
         
         # 11. Total Strength by Alliance Over Time
@@ -564,10 +564,10 @@ def main():
                 current_total_strength = current_alliance_stats(agg_df, 'Strength', 'Current Total Strength')
                 st.markdown("#### Current Total Strength by Alliance")
                 st.dataframe(current_total_strength)
-                # Total Strength Growth Rate Per Day
+                # Total Strength Growth Per Day
                 strength_growth = compute_alliance_growth(agg_df, 'Strength')
-                strength_growth.rename(columns={"Strength Growth Per Day": "Total Strength Growth Rate Per Day"}, inplace=True)
-                st.markdown("#### Total Strength Growth Rate Per Day")
+                strength_growth.rename(columns={"Strength Growth Per Day": "Total Strength Growth Per Day"}, inplace=True)
+                st.markdown("#### Total Strength Growth Per Day")
                 st.dataframe(strength_growth)
         
         # 12. Average Strength by Alliance Over Time
@@ -579,10 +579,10 @@ def main():
             current_avg_strength = current_alliance_stats(agg_df, 'avg_strength', 'Current Average Strength')
             st.markdown("#### Current Average Strength by Alliance")
             st.dataframe(current_avg_strength)
-            # Average Strength Growth Rate Per Day
+            # Average Strength Growth Per Day
             avg_strength_growth = compute_alliance_growth(agg_df, 'avg_strength')
-            avg_strength_growth.rename(columns={"avg_strength Growth Per Day": "Average Strength Growth Rate Per Day"}, inplace=True)
-            st.markdown("#### Average Strength Growth Rate Per Day")
+            avg_strength_growth.rename(columns={"avg_strength Growth Per Day": "Average Strength Growth Per Day"}, inplace=True)
+            st.markdown("#### Average Strength Growth Per Day")
             st.dataframe(avg_strength_growth)
         
         # 13. Total Attacking Casualties by Alliance Over Time
@@ -595,10 +595,10 @@ def main():
                 current_attack = current_alliance_stats(agg_df, 'Attacking Casualties', 'Current Total Attacking Casualties')
                 st.markdown("#### Current Total Attacking Casualties by Alliance")
                 st.dataframe(current_attack)
-                # Attacking Casualties Growth Rate Per Day
+                # Attacking Casualties Growth Per Day
                 attack_growth = compute_alliance_growth(agg_df, 'Attacking Casualties')
-                attack_growth.rename(columns={"Attacking Casualties Growth Per Day": "Attacking Casualties Growth Rate Per Day"}, inplace=True)
-                st.markdown("#### Attacking Casualties Growth Rate Per Day")
+                attack_growth.rename(columns={"Attacking Casualties Growth Per Day": "Attacking Casualties Growth Per Day"}, inplace=True)
+                st.markdown("#### Attacking Casualties Growth Per Day")
                 st.dataframe(attack_growth)
 
         # 14. Average Attacking Casualties by Alliance Over Time
@@ -610,10 +610,10 @@ def main():
             current_avg_attack = current_alliance_stats(agg_df, 'avg_attacking_casualties', 'Current Average Attacking Casualties')
             st.markdown("#### Current Average Attacking Casualties by Alliance")
             st.dataframe(current_avg_attack)
-            # Average Attacking Casualties Growth Rate Per Day
+            # Average Attacking Casualties Growth Per Day
             avg_attack_growth = compute_alliance_growth(agg_df, 'avg_attacking_casualties')
-            avg_attack_growth.rename(columns={"avg_attacking_casualties Growth Per Day": "Average Attacking Casualties Growth Rate Per Day"}, inplace=True)
-            st.markdown("#### Average Attacking Casualties Growth Rate Per Day")
+            avg_attack_growth.rename(columns={"avg_attacking_casualties Growth Per Day": "Average Attacking Casualties Growth Per Day"}, inplace=True)
+            st.markdown("#### Average Attacking Casualties Growth Per Day")
             st.dataframe(avg_attack_growth)
 
         # 15. Total Defensive Casualties by Alliance Over Time
@@ -626,10 +626,10 @@ def main():
                 current_defense = current_alliance_stats(agg_df, 'Defensive Casualties', 'Current Total Defensive Casualties')
                 st.markdown("#### Current Total Defensive Casualties by Alliance")
                 st.dataframe(current_defense)
-                # Defensive Casualties Growth Rate Per Day
+                # Defensive Casualties Growth Per Day
                 defense_growth = compute_alliance_growth(agg_df, 'Defensive Casualties')
-                defense_growth.rename(columns={"Defensive Casualties Growth Per Day": "Defensive Casualties Growth Rate Per Day"}, inplace=True)
-                st.markdown("#### Defensive Casualties Growth Rate Per Day")
+                defense_growth.rename(columns={"Defensive Casualties Growth Per Day": "Defensive Casualties Growth Per Day"}, inplace=True)
+                st.markdown("#### Defensive Casualties Growth Per Day")
                 st.dataframe(defense_growth)
 
         # 16. Average Defensive Casualties by Alliance Over Time
@@ -641,10 +641,10 @@ def main():
             current_avg_defense = current_alliance_stats(agg_df, 'avg_defensive_casualties', 'Current Average Defensive Casualties')
             st.markdown("#### Current Average Defensive Casualties by Alliance")
             st.dataframe(current_avg_defense)
-            # Average Defensive Casualties Growth Rate Per Day
+            # Average Defensive Casualties Growth Per Day
             avg_defense_growth = compute_alliance_growth(agg_df, 'avg_defensive_casualties')
-            avg_defense_growth.rename(columns={"avg_defensive_casualties Growth Per Day": "Average Defensive Casualties Growth Rate Per Day"}, inplace=True)
-            st.markdown("#### Average Defensive Casualties Growth Rate Per Day")
+            avg_defense_growth.rename(columns={"avg_defensive_casualties Growth Per Day": "Average Defensive Casualties Growth Per Day"}, inplace=True)
+            st.markdown("#### Average Defensive Casualties Growth Per Day")
             st.dataframe(avg_defense_growth)
 
     ####################################################
@@ -818,9 +818,9 @@ def main():
                     show_ruler_on_hover=show_hover
                 )
                 st.altair_chart(chart, use_container_width=True)
-                # Display Attacking Casualties Growth Rate Per Day Table.
+                # Display Attacking Casualties Growth Per Day Table.
                 attack_growth_df = compute_growth(df_indiv.dropna(subset=['Attacking Casualties']), "Attacking Casualties")
-                st.markdown("#### Attacking Casualties Growth Rate Per Day")
+                st.markdown("#### Attacking Casualties Growth Per Day")
                 st.dataframe(attack_growth_df)
         
         # (h) Defensive Casualties Over Time
@@ -833,9 +833,9 @@ def main():
                     show_ruler_on_hover=show_hover
                 )
                 st.altair_chart(chart, use_container_width=True)
-                # Display Defensive Casualties Growth Rate Per Day Table.
+                # Display Defensive Casualties Growth Per Day Table.
                 defense_growth_df = compute_growth(df_indiv.dropna(subset=['Defensive Casualties']), "Defensive Casualties")
-                st.markdown("#### Defensive Casualties Growth Rate Per Day")
+                st.markdown("#### Defensive Casualties Growth Per Day")
                 st.dataframe(defense_growth_df)
 
 if __name__ == "__main__":
