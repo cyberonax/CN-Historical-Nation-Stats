@@ -668,27 +668,24 @@ def main():
         show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option")
         
         # Filter raw data for the selected alliance.
-        # Initially filter based on historical data.
         df_indiv = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
-        
         # If any Nation ID is selected, further filter the data.
         if selected_nation_ids:
             df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
+
+        # Filter out nations that are no longer currently in the selected alliance.
+        # First, get each nation’s most recent snapshot from the full dataset.
+        latest_statuses = df_raw.sort_values("date").groupby("Nation ID").last().reset_index()
         
-        # *** NEW FILTER ***
-        # Filter out nation rulers that are not currently in the selected alliance in the latest snapshot.
-        # For nations in previous snapshots that no longer appear in the current snapshot, remove them.
-        latest_nations = df_raw.sort_values('date').groupby('Nation ID').last().reset_index()
-        valid_nation_ids = latest_nations[(latest_nations['Alliance'] == selected_alliance_ind) & (latest_nations['Alliance'].notnull())]["Nation ID"].unique()
-        df_indiv = df_indiv[df_indiv["Nation ID"].isin(valid_nation_ids)]
+        # Identify the Nation IDs whose latest (i.e. current) alliance equals the selected alliance.
+        current_nation_ids = latest_statuses[latest_statuses["Alliance"] == selected_alliance_ind]["Nation ID"]
         
-        # (Optional) Apply a date range filter for individual nation charts.
-        min_date_ind = df_indiv['date'].min()
-        max_date_ind = df_indiv['date'].max()
-        date_range_ind = st.sidebar.date_input("Select date range (Nation Metrics)", [min_date_ind, max_date_ind], key="nation_date")
-        if isinstance(date_range_ind, list) and len(date_range_ind) == 2:
-            start_date_ind, end_date_ind = date_range_ind
-            df_indiv = df_indiv[(df_indiv['date'] >= start_date_ind) & (df_indiv['date'] <= end_date_ind)]
+        # Further filter the individual DataFrame to keep only those nations.
+        df_indiv = df_indiv[df_indiv["Nation ID"].isin(current_nation_ids)]
+        
+        # Now, further filter to only include rows from the overall latest (most recent) snapshot.
+        overall_latest_date = df_raw['date'].max()
+        df_indiv = df_indiv[df_indiv['date'] == overall_latest_date]
         
         with st.expander("Show Raw Nation Data"):
             st.dataframe(df_indiv)
