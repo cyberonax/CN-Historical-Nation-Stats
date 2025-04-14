@@ -671,7 +671,6 @@ def main():
         # NEW: "Display Ruler Name on hover" checkbox placed below the textbox.
         show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option")
         
-        # NEW: Add a date range selector for Nation Metrics below the checkbox.
         # Filter raw data for the selected alliance.
         df_indiv = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
         # If any Nation ID is selected, further filter the data.
@@ -681,13 +680,18 @@ def main():
         if ruler_names:
             df_indiv = df_indiv[df_indiv["Ruler Name"].isin(ruler_names)]
         
-        # Date range filter for Nation Metrics.
-        min_date_nation = df_indiv['date'].min()
-        max_date_nation = df_indiv['date'].max()
+        # NEW: Date range selector for Nation Metrics.
+        # If no data remains, default to today's date.
+        if df_indiv.empty:
+            min_date_nation = datetime.today().date()
+            max_date_nation = datetime.today().date()
+        else:
+            min_date_nation = df_indiv['date'].min().date()
+            max_date_nation = df_indiv['date'].max().date()
         nation_date_range = st.sidebar.date_input("Select date range for Nation Metrics", [min_date_nation, max_date_nation], key="nation_date_range")
         if isinstance(nation_date_range, list) and len(nation_date_range) == 2:
             start_date_n, end_date_n = nation_date_range
-            df_indiv = df_indiv[(df_indiv['date'] >= start_date_n) & (df_indiv['date'] <= end_date_n)]
+            df_indiv = df_indiv[(df_indiv['date'] >= pd.Timestamp(start_date_n)) & (df_indiv['date'] <= pd.Timestamp(end_date_n))]
         
         with st.expander("Show Raw Nation Data"):
             st.dataframe(df_indiv)
