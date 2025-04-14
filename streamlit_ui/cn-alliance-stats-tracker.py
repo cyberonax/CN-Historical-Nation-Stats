@@ -673,27 +673,18 @@ def main():
         if selected_nation_ids:
             df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
 
-        # First, compute the latest snapshot for each nation from the full dataset.
-        latest_snapshots = df_raw.sort_values("date").groupby("Nation ID").last().reset_index()
+        # Determine the overall latest snapshot date.
+        overall_latest_date = df_raw['date'].max()
         
-        # Now, keep only those nations from their latest snapshot that are in the selected alliance.
-        latest_snapshots = latest_snapshots[latest_snapshots["Alliance"] == selected_alliance_ind]
+        # Filter the raw data to only the overall latest snapshot.
+        current_snapshot = df_raw[df_raw['date'] == overall_latest_date]
         
-        # For the individual nation data, merge to only keep the records corresponding to each nation’s latest snapshot.
-        # This ensures that for each nation, only its most recent record is displayed.
-        df_indiv_latest = pd.merge(
-            df_indiv,
-            latest_snapshots[["Nation ID", "date"]],
-            on="Nation ID",
-            how="inner",
-            suffixes=("", "_latest")
-        )
+        # Now, from the current snapshot, get only those nations whose alliance matches the selected alliance.
+        df_indiv = current_snapshot[current_snapshot["Alliance"] == selected_alliance_ind].copy()
         
-        # Retain only those rows where the record's date matches the nation’s latest snapshot date.
-        df_indiv_latest = df_indiv_latest[df_indiv_latest["date"] == df_indiv_latest["date_latest"]].copy()
-        
-        # Optionally, drop the extra date column.
-        df_indiv_latest.drop(columns=["date_latest"], inplace=True)
+        # If additional filtering by Nation ID is desired, apply it here.
+        if selected_nation_ids:
+            df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
         
         with st.expander("Show Raw Nation Data"):
             st.dataframe(df_indiv)
