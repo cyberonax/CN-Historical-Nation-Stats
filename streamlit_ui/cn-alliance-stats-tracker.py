@@ -671,8 +671,12 @@ def main():
         # NEW: "Display Ruler Name on hover" checkbox placed below the textbox.
         show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option")
         
-        # Filter raw data for the selected alliance.
-        df_indiv = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
+        # IMPORTANT: Fill any missing values with "None" in the raw data before filtering.
+        df_raw_filled = df_raw.fillna("None")
+        
+        # Filter raw data for the selected alliance using the filled data.
+        df_indiv = df_raw_filled[df_raw_filled["Alliance"] == selected_alliance_ind].copy()
+        
         # If any Nation ID is selected, further filter the data.
         if selected_nation_ids:
             df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
@@ -692,6 +696,10 @@ def main():
         if isinstance(nation_date_range, list) and len(nation_date_range) == 2:
             start_date_n, end_date_n = nation_date_range
             df_indiv = df_indiv[(df_indiv['date'] >= pd.Timestamp(start_date_n)) & (df_indiv['date'] <= pd.Timestamp(end_date_n))]
+        
+        # FORCE showing only nations that are in the most recent date snapshot.
+        overall_latest_date = df_raw_filled['date'].max()
+        df_indiv = df_indiv[df_indiv['date'] == overall_latest_date]
         
         with st.expander("Show Raw Nation Data"):
             st.dataframe(df_indiv)
