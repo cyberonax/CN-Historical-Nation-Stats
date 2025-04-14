@@ -664,7 +664,13 @@ def main():
         nation_ids = sorted(df_raw["Nation ID"].dropna().unique())
         selected_nation_ids = st.sidebar.multiselect("Filter by Nation ID", options=nation_ids, default=[], key="filter_nation_id")
         
-        # --- New Filtering Option: Filter by Ruler Names ---
+        # Filter raw data for the selected alliance.
+        df_indiv = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
+        # If any Nation ID is selected, further filter the data.
+        if selected_nation_ids:
+            df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
+        
+        # --- Insert the new Ruler Name filter here ---
         ruler_names_text = st.sidebar.text_area(
             "Filter by Ruler Name",
             placeholder="Enter one Ruler Name per line...",
@@ -673,7 +679,7 @@ def main():
         if ruler_names_text:
             # Create a list of ruler names, ignoring blank lines.
             ruler_names_list = [name.strip() for name in ruler_names_text.splitlines() if name.strip()]
-            # Update the data filter to only include rows with matching Ruler Name.
+            # Filter df_indiv for rows with a matching Ruler Name.
             df_indiv = df_indiv[df_indiv["Ruler Name"].isin(ruler_names_list)]
 
         # Add an option to show the Ruler Name on hover.
