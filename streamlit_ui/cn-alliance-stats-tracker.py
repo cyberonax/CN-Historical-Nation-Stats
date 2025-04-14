@@ -990,6 +990,7 @@ def main():
                 </button>
                 """
                 st.components.v1.html(copy_button_html, height=50)
+                alt_df["Activity"] = alt_df["Activity"].apply(lambda x: f"{x:.2f}" if isinstance(x, (float, int)) else x)
                 st.table(alt_df)
 
 if __name__ == "__main__":
