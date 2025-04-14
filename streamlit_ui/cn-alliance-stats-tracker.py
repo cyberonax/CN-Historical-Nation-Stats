@@ -888,11 +888,11 @@ def main():
             if not names_input.strip():
                 st.info("No names entered. Please paste one or more names.")
             else:
-                st.markdown("### Summary of Activity")
+                st.markdown("### Formatted Inactivity Summary")
                 st.markdown(
                     """
                     The table below organizes the inactivity details for each name you entered. 
-                    It respects your original grouping by preserving blank lines as separators.
+                    It respects your original line grouping by preserving blank lines as separators.
                     """
                 )
                 raw_lines = names_input.splitlines()
@@ -912,17 +912,25 @@ def main():
                         continue
                     lookup_name = line.strip()
                     temp_df = st.session_state.df.copy()
-                    # Ensure consistency with Tab 2 filtering:
+                    # Fill missing values for consistency.
                     temp_df["Alliance"] = temp_df["Alliance"].fillna("None")
                     temp_df["Ruler Name"] = temp_df["Ruler Name"].fillna("None")
                     mask = temp_df["Ruler Name"].str.lower() == lookup_name.lower()
                     if not mask.any():
                         mask = temp_df["Nation Name"].str.lower() == lookup_name.lower()
                     if mask.any():
+                        # Get one matched row; note that we'll re-check for latest snapshot for Alliance.
                         row = temp_df[mask].iloc[0]
                         ruler = row["Ruler Name"]
                         res = get_resource_1_2(row)
-                        alliance = row["Alliance"]
+                        # Retrieve Alliance value from the nation's latest snapshot.
+                        nation_snapshots = temp_df[temp_df["Nation ID"] == row["Nation ID"]]
+                        if not nation_snapshots.empty:
+                            latest_idx = nation_snapshots["date"].idxmax()
+                            latest_row = nation_snapshots.loc[latest_idx]
+                            alliance = latest_row["Alliance"]
+                        else:
+                            alliance = row["Alliance"]
                         team = row["Team"]
                         created_dt = pd.to_datetime(row["Created"], errors='coerce')
                         days_old = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
@@ -965,7 +973,6 @@ def main():
                 """
                 st.components.v1.html(copy_button_html, height=50)
                 st.table(alt_df)
-
 
 if __name__ == "__main__":
     main()
