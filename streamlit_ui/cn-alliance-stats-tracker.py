@@ -673,19 +673,27 @@ def main():
         if selected_nation_ids:
             df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
 
-        # Filter out nations that are no longer currently in the selected alliance.
-        # First, get each nation’s most recent snapshot from the full dataset.
-        latest_statuses = df_raw.sort_values("date").groupby("Nation ID").last().reset_index()
+        # First, compute the latest snapshot for each nation from the full dataset.
+        latest_snapshots = df_raw.sort_values("date").groupby("Nation ID").last().reset_index()
         
-        # Identify the Nation IDs whose latest (i.e. current) alliance equals the selected alliance.
-        current_nation_ids = latest_statuses[latest_statuses["Alliance"] == selected_alliance_ind]["Nation ID"]
+        # Now, keep only those nations from their latest snapshot that are in the selected alliance.
+        latest_snapshots = latest_snapshots[latest_snapshots["Alliance"] == selected_alliance_ind]
         
-        # Further filter the individual DataFrame to keep only those nations.
-        df_indiv = df_indiv[df_indiv["Nation ID"].isin(current_nation_ids)]
+        # For the individual nation data, merge to only keep the records corresponding to each nation’s latest snapshot.
+        # This ensures that for each nation, only its most recent record is displayed.
+        df_indiv_latest = pd.merge(
+            df_indiv,
+            latest_snapshots[["Nation ID", "date"]],
+            on="Nation ID",
+            how="inner",
+            suffixes=("", "_latest")
+        )
         
-        # Now, further filter to only include rows from the overall latest (most recent) snapshot.
-        overall_latest_date = df_raw['date'].max()
-        df_indiv = df_indiv[df_indiv['date'] == overall_latest_date]
+        # Retain only those rows where the record's date matches the nation’s latest snapshot date.
+        df_indiv_latest = df_indiv_latest[df_indiv_latest["date"] == df_indiv_latest["date_latest"]].copy()
+        
+        # Optionally, drop the extra date column.
+        df_indiv_latest.drop(columns=["date_latest"], inplace=True)
         
         with st.expander("Show Raw Nation Data"):
             st.dataframe(df_indiv)
