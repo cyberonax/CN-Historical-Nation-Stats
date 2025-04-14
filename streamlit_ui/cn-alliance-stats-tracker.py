@@ -871,10 +871,18 @@ def main():
     ####################################################
     # TAB 3: Inactivity Tracker
     ####################################################
+    # Ensure that get_resource_1_2 is defined. If you already have it, you may remove this.
+    if "get_resource_1_2" not in globals():
+        def get_resource_1_2(row):
+            # Example implementation: combine "Resource 1" and "Resource 2" if available.
+            resource1 = row.get("Resource 1", "")
+            resource2 = row.get("Resource 2", "")
+            return f"{resource1} + {resource2}" if resource1 and resource2 else resource1 or resource2
+
     with tabs[2]:
         st.header("Inactivity Tracker")
-        st.subheader("Enter Nation or Ruler Names (one per line)")
-        names_input = st.text_area("Paste the names here", height=150)
+        st.markdown("This tool calculates each nation’s all-time average inactivity (activity score) by matching the provided nation or ruler names.")
+        names_input = st.text_area("Enter nation or ruler names (one per line)", height=100)
         
         if st.button("Search", key="inactivity_tracker_search"):
             if not names_input.strip():
