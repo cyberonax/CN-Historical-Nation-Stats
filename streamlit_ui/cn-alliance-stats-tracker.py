@@ -881,18 +881,18 @@ def main():
 
     with tabs[2]:
         st.header("Inactivity Tracker")
-        st.markdown("This tool calculates each nation’s all-time average inactivity (activity score) by matching the provided nation or ruler names.")
+        st.markdown("This tool calculates the all-time average inactivity (activity score) for each nation by matching the provided nation or ruler names.")
         names_input = st.text_area("Enter nation or ruler names (one per line)", height=100)
         
         if st.button("Search", key="inactivity_tracker_search"):
             if not names_input.strip():
                 st.info("No names entered. Please paste one or more names.")
             else:
-                st.markdown("### Alternative Format Output")
+                st.markdown("### Formatted Inactivity Summary")
                 st.markdown(
                     """
-                    This table preserves the original grouping and blank lines as entered.
-                    Blank lines are preserved as empty rows.
+                    The table below organizes the inactivity details for each name you entered. 
+                    It respects your original line grouping by preserving blank lines as separators.
                     """
                 )
                 raw_lines = names_input.splitlines()
