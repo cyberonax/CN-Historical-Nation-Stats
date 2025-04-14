@@ -888,11 +888,11 @@ def main():
             if not names_input.strip():
                 st.info("No names entered. Please paste one or more names.")
             else:
-                st.markdown("### Formatted Inactivity Summary")
+                st.markdown("### Summary of Activity")
                 st.markdown(
                     """
                     The table below organizes the inactivity details for each name you entered. 
-                    It respects your original line grouping by preserving blank lines as separators.
+                    It respects your original grouping by preserving blank lines as separators.
                     """
                 )
                 raw_lines = names_input.splitlines()
@@ -919,7 +919,7 @@ def main():
                     if not mask.any():
                         mask = temp_df["Nation Name"].str.lower() == lookup_name.lower()
                     if mask.any():
-                        # Get one matched row; note that we'll re-check for latest snapshot for Alliance.
+                        # Get one matched row.
                         row = temp_df[mask].iloc[0]
                         ruler = row["Ruler Name"]
                         res = get_resource_1_2(row)
@@ -929,8 +929,10 @@ def main():
                             latest_idx = nation_snapshots["date"].idxmax()
                             latest_row = nation_snapshots.loc[latest_idx]
                             alliance = latest_row["Alliance"]
+                            if alliance == "None":
+                                alliance = ""
                         else:
-                            alliance = row["Alliance"]
+                            alliance = row["Alliance"] if row["Alliance"] != "None" else ""
                         team = row["Team"]
                         created_dt = pd.to_datetime(row["Created"], errors='coerce')
                         days_old = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
