@@ -892,7 +892,7 @@ def main():
                 st.markdown(
                     """
                     The table below organizes the inactivity details for each name you entered. 
-                    It respects your original line grouping by preserving blank lines as separators.
+                    It respects your original grouping by preserving blank lines as separators.
                     """
                 )
                 raw_lines = names_input.splitlines()
@@ -912,6 +912,9 @@ def main():
                         continue
                     lookup_name = line.strip()
                     temp_df = st.session_state.df.copy()
+                    # Ensure consistency with Tab 2 filtering:
+                    temp_df["Alliance"] = temp_df["Alliance"].fillna("None")
+                    temp_df["Ruler Name"] = temp_df["Ruler Name"].fillna("None")
                     mask = temp_df["Ruler Name"].str.lower() == lookup_name.lower()
                     if not mask.any():
                         mask = temp_df["Nation Name"].str.lower() == lookup_name.lower()
@@ -962,6 +965,7 @@ def main():
                 """
                 st.components.v1.html(copy_button_html, height=50)
                 st.table(alt_df)
+
 
 if __name__ == "__main__":
     main()
