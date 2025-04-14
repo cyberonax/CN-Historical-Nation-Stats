@@ -664,12 +664,14 @@ def main():
         nation_ids = sorted(df_raw["Nation ID"].dropna().unique())
         selected_nation_ids = st.sidebar.multiselect("Filter by Nation ID", options=nation_ids, default=[], key="filter_nation_id")
         
-        # Add an option to show the Ruler Name on hover.
-        show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option")
-        
         # NEW: Sidebar textbox for filtering by a list of Ruler Names (one per line).
         ruler_names_raw = st.sidebar.text_area("Filter by Ruler Names (one per line)", value="", key="filter_ruler_names")
         ruler_names = [name.strip() for name in ruler_names_raw.splitlines() if name.strip()]
+        
+        # NEW: Sidebar date range filter for Nation Metrics.
+        min_date_ind = df_raw['date'].min()
+        max_date_ind = df_raw['date'].max()
+        date_range_ind = st.sidebar.date_input("Select date range for Nation Metrics", [min_date_ind, max_date_ind], key="nation_date")
         
         # Filter raw data for the selected alliance.
         df_indiv = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
@@ -679,6 +681,10 @@ def main():
         # If Ruler Names filter is provided, further filter the data.
         if ruler_names:
             df_indiv = df_indiv[df_indiv["Ruler Name"].isin(ruler_names)]
+        # Apply date range for Nation Metrics.
+        if isinstance(date_range_ind, list) and len(date_range_ind) == 2:
+            start_date_ind, end_date_ind = date_range_ind
+            df_indiv = df_indiv[(df_indiv['date'] >= start_date_ind) & (df_indiv['date'] <= end_date_ind)]
         
         # Determine the overall latest snapshot date.
         overall_latest_date = df_raw['date'].max()
@@ -704,7 +710,7 @@ def main():
         # (a) Nation Activity Distribution Over Time (if available)
         if 'activity_score' in df_indiv.columns:
             with st.expander("Nation Inactivity Over Time (Days)"):
-                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['activity_score']), "activity_score", "Activity Score (Days)", show_ruler_on_hover=show_hover)
+                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['activity_score']), "activity_score", "Activity Score (Days)", show_ruler_on_hover=True)
                 st.altair_chart(chart, use_container_width=True)
                 st.caption("Lower scores indicate more recent activity.")
                 
@@ -725,7 +731,7 @@ def main():
                 df_indiv.dropna(subset=['Empty Slots Count']),
                 "Empty Slots Count",
                 "Empty Trade Slots",
-                show_ruler_on_hover=show_hover
+                show_ruler_on_hover=True
             )
             st.altair_chart(chart, use_container_width=True)
             
@@ -766,7 +772,7 @@ def main():
                     df_indiv.dropna(subset=['Technology']),
                     "Technology",
                     "Technology",
-                    show_ruler_on_hover=show_hover
+                    show_ruler_on_hover=True
                 )
                 st.altair_chart(chart, use_container_width=True)
                 
@@ -782,7 +788,7 @@ def main():
                     df_indiv.dropna(subset=['Infrastructure']),
                     "Infrastructure",
                     "Infrastructure",
-                    show_ruler_on_hover=show_hover
+                    show_ruler_on_hover=True
                 )
                 st.altair_chart(chart, use_container_width=True)
                 
@@ -798,7 +804,7 @@ def main():
                     df_indiv.dropna(subset=['Base Land']),
                     "Base Land",
                     "Base Land",
-                    show_ruler_on_hover=show_hover
+                    show_ruler_on_hover=True
                 )
                 st.altair_chart(chart, use_container_width=True)
                 
@@ -814,7 +820,7 @@ def main():
                     df_indiv.dropna(subset=['Strength']),
                     "Strength",
                     "Strength",
-                    show_ruler_on_hover=show_hover
+                    show_ruler_on_hover=True
                 )
                 st.altair_chart(chart, use_container_width=True)
                 
@@ -830,7 +836,7 @@ def main():
                     df_indiv.dropna(subset=['Attacking Casualties']),
                     "Attacking Casualties",
                     "Attacking Casualties",
-                    show_ruler_on_hover=show_hover
+                    show_ruler_on_hover=True
                 )
                 st.altair_chart(chart, use_container_width=True)
                 # Display Attacking Casualties Growth Per Day Table.
@@ -845,13 +851,16 @@ def main():
                     df_indiv.dropna(subset=['Defensive Casualties']),
                     "Defensive Casualties",
                     "Defensive Casualties",
-                    show_ruler_on_hover=show_hover
+                    show_ruler_on_hover=True
                 )
                 st.altair_chart(chart, use_container_width=True)
                 # Display Defensive Casualties Growth Per Day Table.
                 defense_growth_df = compute_growth(df_indiv.dropna(subset=['Defensive Casualties']), "Defensive Casualties")
                 st.markdown("#### Defensive Casualties Growth Per Day")
                 st.dataframe(defense_growth_df)
+        
+        # NEW: Now place the "Display Ruler Name on hover" checkbox at the bottom.
+        show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option_bottom")
 
 if __name__ == "__main__":
     main()
