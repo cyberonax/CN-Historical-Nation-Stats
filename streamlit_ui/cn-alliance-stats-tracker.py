@@ -305,7 +305,7 @@ def main():
     st.title("Cyber Nations | Alliance Stats Timeline Tracker")
     st.markdown("""
         This dashboard displays alliance and nation statistics over time.
-        Use the tabs below to switch between aggregated alliance charts and individual nation metrics.
+        Use the tabs below to switch between aggregated alliance charts, individual nation metrics, and inactivity tracking.
     """)
     
     # Load raw data
@@ -316,7 +316,7 @@ def main():
     df_raw['snapshot_date'] = pd.to_datetime(df_raw['snapshot_date'])
     # Preserve the full timestamp including hour for accurate snapshot differentiation.
     df_raw['date'] = df_raw['snapshot_date']
-
+    
     # Ensure key numeric metrics are converted properly.
     numeric_cols = ['Technology', 'Infrastructure', 'Base Land', 'Strength', 'Attacking Casualties', 'Defensive Casualties']
     for col in numeric_cols:
@@ -338,8 +338,12 @@ def main():
         }
         df_raw['activity_score'] = df_raw['Activity'].map(activity_mapping)
     
-    # Create two tabs: one for aggregated metrics and one for individual nation metrics.
-    tabs = st.tabs(["Aggregated Alliance Metrics", "Individual Nation Metrics"])
+    # Save the full dataframe to session_state to support alternative lookups.
+    if "df" not in st.session_state:
+        st.session_state.df = df_raw
+
+    # Create three tabs: Aggregated Alliance Metrics, Individual Nation Metrics, and Inactivity Tracker.
+    tabs = st.tabs(["Aggregated Alliance Metrics", "Individual Nation Metrics", "Inactivity Tracker"])
     
     #########################################
     # TAB 1: Aggregated Alliance Metrics
@@ -646,7 +650,7 @@ def main():
             avg_defense_growth.rename(columns={"avg_defensive_casualties Growth Per Day": "Average Defensive Casualties Growth Per Day"}, inplace=True)
             st.markdown("#### Average Defensive Casualties Growth Per Day")
             st.dataframe(avg_defense_growth)
-
+    
     ####################################################
     # TAB 2: Individual Nation Metrics Over Time
     ####################################################
@@ -863,6 +867,69 @@ def main():
                 defense_growth_df = compute_growth(df_indiv.dropna(subset=['Defensive Casualties']), "Defensive Casualties")
                 st.markdown("#### Defensive Casualties Growth Per Day")
                 st.dataframe(defense_growth_df)
+    
+    ####################################################
+    # TAB 3: Inactivity Tracker
+    ####################################################
+    with tabs[2]:
+        st.header("Inactivity Tracker")
+        st.subheader("Enter Nation or Ruler Names (one per line)")
+        names_input = st.text_area("Paste the names here", height=150)
+        
+        if st.button("Search", key="inactivity_tracker_search"):
+            if not names_input.strip():
+                st.info("No names entered. Please paste one or more names.")
+            else:
+                # Process the raw input lines preserving blank lines.
+                raw_lines = names_input.splitlines()
+                alt_rows = []
+                for line in raw_lines:
+                    if line.strip() == "":
+                        # Preserve blank row.
+                        alt_rows.append({
+                            "Nation ID": "",
+                            "Ruler Name": "",
+                            "Nation Name": "",
+                            "All Time Average Inactivity (Days)": ""
+                        })
+                        continue
+                    lookup_name = line.strip()
+                    temp_df = st.session_state.df.copy()
+                    mask = temp_df["Ruler Name"].str.lower() == lookup_name.lower()
+                    if not mask.any():
+                        mask = temp_df["Nation Name"].str.lower() == lookup_name.lower()
+                    if mask.any():
+                        row = temp_df[mask].iloc[0]
+                        # Compute the all time average inactivity for this nation.
+                        nation_snapshots = temp_df[temp_df["Nation ID"] == row["Nation ID"]]
+                        nation_snapshots = nation_snapshots.dropna(subset=["activity_score"])
+                        if not nation_snapshots.empty:
+                            all_time_inactivity = round(nation_snapshots["activity_score"].mean(), 2)
+                        else:
+                            all_time_inactivity = ""
+                        alt_rows.append({
+                            "Nation ID": row["Nation ID"],
+                            "Ruler Name": row["Ruler Name"],
+                            "Nation Name": row["Nation Name"],
+                            "All Time Average Inactivity (Days)": all_time_inactivity
+                        })
+                    else:
+                        # For unrecognized names, repeat the input text in every column.
+                        alt_rows.append({
+                            "Nation ID": lookup_name,
+                            "Ruler Name": lookup_name,
+                            "Nation Name": lookup_name,
+                            "All Time Average Inactivity (Days)": lookup_name
+                        })
+                alt_df = pd.DataFrame(
+                    alt_rows,
+                    columns=["Nation ID", "Ruler Name", "Nation Name", "All Time Average Inactivity (Days)"]
+                )
+                st.table(alt_df)
+                
+                # Provide a CSV download option (Copy Table button).
+                csv = alt_df.to_csv(index=False)
+                st.download_button("Copy Table", data=csv, file_name="inactivity_tracker_results.csv", mime="text/csv")
 
 if __name__ == "__main__":
     main()
