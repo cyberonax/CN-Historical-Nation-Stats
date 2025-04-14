@@ -888,7 +888,7 @@ def main():
             if not names_input.strip():
                 st.info("No names entered. Please paste one or more names.")
             else:
-                st.markdown("### Summary of Inactive Nations")
+                st.markdown("### Summary of Activity")
                 st.markdown(
                     """
                     The table below organizes the inactivity details for each name you entered. 
