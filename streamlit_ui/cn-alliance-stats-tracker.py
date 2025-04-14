@@ -919,27 +919,34 @@ def main():
                     if not mask.any():
                         mask = temp_df["Nation Name"].str.lower() == lookup_name.lower()
                     if mask.any():
-                        # Get one matched row.
+                        # Retrieve all snapshots for the matched nation.
                         row = temp_df[mask].iloc[0]
-                        ruler = row["Ruler Name"]
-                        res = get_resource_1_2(row)
-                        # Retrieve Alliance value from the nation's latest snapshot.
                         nation_snapshots = temp_df[temp_df["Nation ID"] == row["Nation ID"]]
+                        # Use the latest snapshot for Alliance, Team, and Resource 1+2.
                         if not nation_snapshots.empty:
                             latest_idx = nation_snapshots["date"].idxmax()
                             latest_row = nation_snapshots.loc[latest_idx]
                             alliance = latest_row["Alliance"]
                             if alliance == "None":
                                 alliance = ""
+                            team = latest_row["Team"]
+                            if team == "None":
+                                team = ""
+                            res = get_resource_1_2(latest_row)
+                            created_dt = pd.to_datetime(latest_row["Created"], errors='coerce')
+                            days_old = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
                         else:
+                            # Fallback to the originally matched row if snapshots are missing.
                             alliance = row["Alliance"] if row["Alliance"] != "None" else ""
-                        team = row["Team"]
-                        created_dt = pd.to_datetime(row["Created"], errors='coerce')
-                        days_old = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
+                            team = row["Team"] if row["Team"] != "None" else ""
+                            res = get_resource_1_2(row)
+                            created_dt = pd.to_datetime(row["Created"], errors='coerce')
+                            days_old = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
+                        ruler = row["Ruler Name"]
                         nation_drill = "https://www.cybernations.net/nation_drill_display.asp?Nation_ID=" + str(row["Nation ID"])
                         # Compute the average activity score for all snapshots of this nation.
-                        nation_snapshots = temp_df[temp_df["Nation ID"] == row["Nation ID"]].dropna(subset=["activity_score"])
-                        activity_val = round(nation_snapshots["activity_score"].mean(), 2) if not nation_snapshots.empty else ""
+                        nation_snapshots_activity = temp_df[temp_df["Nation ID"] == row["Nation ID"]].dropna(subset=["activity_score"])
+                        activity_val = round(nation_snapshots_activity["activity_score"].mean(), 2) if not nation_snapshots_activity.empty else ""
                         alt_rows.append({
                             "Ruler Name": ruler,
                             "Resource 1+2": res,
