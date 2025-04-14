@@ -655,6 +655,10 @@ def main():
         
         # Sidebar filter for individual nation metrics.
         st.sidebar.header("Nation Metrics")
+        # Before filtering by Alliance, fill missing values for the key columns.
+        df_raw["Alliance"] = df_raw["Alliance"].fillna("None")
+        df_raw["Ruler Name"] = df_raw["Ruler Name"].fillna("None")
+        
         alliances = sorted(df_raw['Alliance'].dropna().unique())
         default_ind = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
         selected_alliance_ind = st.sidebar.selectbox("Select Alliance for Nation Metrics", options=alliances, index=default_ind, key="nation")
@@ -664,42 +668,44 @@ def main():
         nation_ids = sorted(df_raw["Nation ID"].dropna().unique())
         selected_nation_ids = st.sidebar.multiselect("Filter by Nation ID", options=nation_ids, default=[], key="filter_nation_id")
         
-        # NEW: Sidebar textbox for filtering by a list of Ruler Names (one per line).
+        # Sidebar textbox for filtering by a list of Ruler Names (one per line).
         ruler_names_raw = st.sidebar.text_area("Filter by Ruler Names (one per line)", value="", key="filter_ruler_names")
         ruler_names = [name.strip() for name in ruler_names_raw.splitlines() if name.strip()]
         
-        # NEW: "Display Ruler Name on hover" checkbox placed below the textbox.
+        # "Display Ruler Name on hover" checkbox placed below the textbox.
         show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option")
         
-        # IMPORTANT: Fill any missing values with "None" in the raw data before filtering.
-        df_raw_filled = df_raw.fillna("None")
-        
-        # Filter raw data for the selected alliance using the filled data.
-        df_indiv = df_raw_filled[df_raw_filled["Alliance"] == selected_alliance_ind].copy()
-        
-        # If any Nation ID is selected, further filter the data.
+        # --- Determine valid Nation IDs based on the latest snapshot ---
+        # First, create a candidate subset using Alliance, Nation ID, and Ruler Name filters.
+        candidate = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
         if selected_nation_ids:
-            df_indiv = df_indiv[df_indiv["Nation ID"].isin(selected_nation_ids)]
-        # If Ruler Names filter is provided, further filter the data.
+            candidate = candidate[candidate["Nation ID"].isin(selected_nation_ids)]
         if ruler_names:
-            df_indiv = df_indiv[df_indiv["Ruler Name"].isin(ruler_names)]
+            candidate = candidate[candidate["Ruler Name"].isin(ruler_names)]
         
-        # NEW: Date range selector for Nation Metrics.
-        # If no data remains, default to today's date.
-        if df_indiv.empty:
-            min_date_nation = datetime.today().date()
-            max_date_nation = datetime.today().date()
+        # Use a date range selector (only for identifying valid nations)
+        if candidate.empty:
+            min_date_candidate = datetime.today().date()
+            max_date_candidate = datetime.today().date()
         else:
-            min_date_nation = df_indiv['date'].min().date()
-            max_date_nation = df_indiv['date'].max().date()
-        nation_date_range = st.sidebar.date_input("Select date range for Nation Metrics", [min_date_nation, max_date_nation], key="nation_date_range")
-        if isinstance(nation_date_range, list) and len(nation_date_range) == 2:
-            start_date_n, end_date_n = nation_date_range
-            df_indiv = df_indiv[(df_indiv['date'] >= pd.Timestamp(start_date_n)) & (df_indiv['date'] <= pd.Timestamp(end_date_n))]
-        
-        # FORCE showing only nations that are in the most recent date snapshot.
-        overall_latest_date = df_raw_filled['date'].max()
-        df_indiv = df_indiv[df_indiv['date'] == overall_latest_date]
+            min_date_candidate = candidate['date'].min().date()
+            max_date_candidate = candidate['date'].max().date()
+        date_range_candidate = st.sidebar.date_input("Select date range for Nation Metrics", [min_date_candidate, max_date_candidate], key="nation_date_range")
+        if isinstance(date_range_candidate, list) and len(date_range_candidate) == 2:
+            start_date_candidate, end_date_candidate = date_range_candidate
+            candidate_filtered = candidate[(candidate['date'] >= pd.Timestamp(start_date_candidate)) & (candidate['date'] <= pd.Timestamp(end_date_candidate))]
+        else:
+            candidate_filtered = candidate
+
+        # From the candidate filtered subset, only keep nations that appear in its latest snapshot.
+        if not candidate_filtered.empty:
+            latest_date = candidate_filtered['date'].max()
+            valid_nations = set(candidate_filtered[candidate_filtered['date'] == latest_date]["Nation ID"])
+        else:
+            valid_nations = set()
+
+        # Now, build the final df_indiv: use all snapshots (for all dates) of those valid nations in the selected alliance.
+        df_indiv = df_raw[(df_raw["Alliance"] == selected_alliance_ind) & (df_raw["Nation ID"].isin(valid_nations))].copy()
         
         with st.expander("Show Raw Nation Data"):
             st.dataframe(df_indiv)
