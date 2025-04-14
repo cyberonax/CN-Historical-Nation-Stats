@@ -7,6 +7,8 @@ from datetime import datetime
 import altair as alt
 import itertools
 
+st.set_page_config(layout="wide")
+
 ##############################
 # HELPER FUNCTIONS
 ##############################
