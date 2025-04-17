@@ -23,7 +23,6 @@ def parse_date_from_filename(filename):
         return None
     date_token, zip_id = match.groups()
     hour = 0 if zip_id == "510001" else 12
-    # Try splitting date_token into m/d/yyyy
     for m_digits in [1,2]:
         for d_digits in [1,2]:
             if m_digits + d_digits + 4 == len(date_token):
@@ -39,7 +38,6 @@ def parse_date_from_filename(filename):
 
 @st.cache_data(show_spinner="Loading historical data...", ttl=60*60*24)
 def load_data():
-    """Load and concatenate all snapshots from downloaded_zips folder."""
     dfs = []
     zip_folder = Path("downloaded_zips")
     if not zip_folder.exists():
@@ -59,12 +57,9 @@ def load_data():
                     dfs.append(df)
         except Exception as e:
             st.error(f"Error reading {zf.name}: {e}")
-    if dfs:
-        return pd.concat(dfs, ignore_index=True)
-    return pd.DataFrame()
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
 def map_activity_scores(df):
-    """Map textual Activity to numeric days-since-active."""
     mapping = {
         "Active In The Last 3 Days": 3,
         "Active This Week": 7,
@@ -76,7 +71,6 @@ def map_activity_scores(df):
     return df
 
 def altair_individual_metric_chart(df, metric, title, show_hover=True):
-    """Line chart with hover labels for each Ruler Name over time."""
     base = alt.Chart(df).encode(
         x=alt.X("date:T", title="Date"),
         y=alt.Y(f"{metric}:Q", title=title),
@@ -104,7 +98,6 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
 def main():
     st.title("Cyber Nations | Trade Circle Tool")
 
-    # Load and preprocess
     df = load_data()
     if df.empty:
         st.error("No data loaded.")
@@ -115,35 +108,27 @@ def main():
     df['Alliance']   = df['Alliance'].fillna("None")
     df['Ruler Name'] = df['Ruler Name'].fillna("None")
 
-    # Map activity to numeric
     if 'Activity' in df.columns:
         df = map_activity_scores(df)
 
-    # Alliance selector
     alliances = sorted(df['Alliance'].unique())
     default_idx = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
     selected_alliance = st.selectbox("Select Alliance", alliances, index=default_idx)
 
-    # Filter by alliance
     df_all = df[df['Alliance'] == selected_alliance].copy()
     if df_all.empty:
         st.warning("No data for that alliance.")
         return
 
-    # Show raw data
     with st.expander("Raw Alliance Data", expanded=False):
         st.dataframe(df_all)
 
     st.markdown(f"### Charts for Alliance: {selected_alliance}")
 
-    # Identify nations present in the most recent snapshot
     latest_date = df_all['date'].max()
     current_rulers = set(df_all[df_all['date'] == latest_date]['Ruler Name'])
-
-    # Prepare per-nation DataFrame: only those still present most recently
     df_indiv = df_all[df_all['Ruler Name'].isin(current_rulers)].copy()
 
-    # Compute all-time average inactivity per ruler
     if 'activity_score' in df_indiv.columns:
         avg_activity = (
             df_indiv
@@ -154,11 +139,9 @@ def main():
             .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
         )
 
-        # Filter by average inactivity < 14 days
         valid = set(avg_activity[avg_activity['All Time Average Days of Inactivity'] < 14]['Ruler Name'])
         df_filtered = df_indiv[df_indiv['Ruler Name'].isin(valid)].copy()
 
-        # Chart & table
         with st.expander("Nation Inactivity Over Time (<14 Days)", expanded=True):
             chart = altair_individual_metric_chart(
                 df_filtered,
@@ -169,10 +152,12 @@ def main():
             st.altair_chart(chart, use_container_width=True)
             st.caption("Lower scores indicate more recent activity.")
 
-            avg_display = (
-                avg_activity[avg_activity['Ruler Name'].isin(valid)]
-                .sort_values('All Time Average Days of Inactivity', ascending=False)
-            )
+            # Reset row numbers to 1,2,3...
+            avg_display = avg_activity[avg_activity['Ruler Name'].isin(valid)] \
+                .sort_values('All Time Average Days of Inactivity', ascending=False) \
+                .reset_index(drop=True)
+            avg_display.index = avg_display.index + 1
+
             st.markdown("#### All Time Average Days of Inactivity")
             st.dataframe(avg_display)
 
