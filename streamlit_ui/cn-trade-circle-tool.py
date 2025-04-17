@@ -8,79 +8,98 @@ import altair as alt
 
 st.set_page_config(layout="wide")
 
-# -- Helpers ------------------------------------------------
+# -- Helper Functions ------------------------------------------------
 def parse_date_from_filename(name):
     m = re.match(r"^CyberNations_SE_Nation_Stats_([0-9]+)(510001|510002)\.zip$", name)
     if not m:
         return None
     tok, z = m.groups()
     hour = 0 if z == '510001' else 12
-    # split tok into m,d,y
     for md in [1,2]:
         for dd in [1,2]:
-            if md+dd+4 == len(tok):
+            if md + dd + 4 == len(tok):
                 try:
                     mon = int(tok[:md]); day = int(tok[md:md+dd]); year = int(tok[md+dd:])
-                    if 1<=mon<=12 and 1<=day<=31:
+                    if 1 <= mon <= 12 and 1 <= day <= 31:
                         return datetime(year, mon, day, hour)
                 except:
-                    pass
+                    continue
     return None
 
-@st.cache_data(ttl=86400)
-def load_data(folder='downloaded_zips'):
-    zf_path = Path(folder)
-    if not zf_path.exists():
-        st.error(f"Folder '{folder}' not found.")
+@st.cache_data(ttl=24*60*60)
+def load_data(folder: str = 'downloaded_zips') -> pd.DataFrame:
+    """
+    Load and parse all CyberNations zip snapshots into a single DataFrame.
+    """
+    zip_path = Path(folder)
+    if not zip_path.exists():
+        st.error(f"Folder '{folder}' not found. Ensure your zips are in place.")
         return pd.DataFrame()
-    dfs = []
-    for zfile in zf_path.glob("CyberNations_SE_Nation_Stats_*.zip"):
-        dt = parse_date_from_filename(zfile.name)
-        if not dt:
-            continue
-        with zipfile.ZipFile(zfile) as z:
-            files = z.namelist()
-            if not files:
-                continue
-            with z.open(files[0]) as f:
-                df = pd.read_csv(f, delimiter='|', encoding='ISO-8859-1', low_memory=False)
-                df['date'] = dt
-                dfs.append(df)
-    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
-# -- App -----------------------------------------------------
+    frames = []
+    for file in zip_path.glob("CyberNations_SE_Nation_Stats_*.zip"):
+        date = parse_date_from_filename(file.name)
+        if not date:
+            continue
+        with zipfile.ZipFile(file, 'r') as z:
+            names = z.namelist()
+            if not names:
+                continue
+            with z.open(names[0]) as f:
+                df = pd.read_csv(f, delimiter='|', encoding='ISO-8859-1', low_memory=False)
+                df['date'] = date
+                frames.append(df)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+# -- Main App --------------------------------------------------------
 def main():
     st.title("Cyber Nations | Trade Circle Tool")
-
+    
+    # Load data
     df = load_data()
     if df.empty:
         return
 
-    # Prepare
+    # Clean and prepare
     df['Alliance'] = df['Alliance'].fillna("(No Alliance)")
     df['Ruler Name'] = df['Ruler Name'].fillna("Unknown")
-    all_all = sorted(df['Alliance'].unique())
 
-    sel = st.selectbox("Select Alliance", all_all)
-    sub = df[df['Alliance'] == sel]
+    # Alliance selector
+    alliances = sorted(df['Alliance'].unique())
+    selected = st.selectbox("Select Alliance", alliances)
+    subset = df[df['Alliance'] == selected]
 
-    # Show list of players
-    players = sorted(sub['Ruler Name'].unique())
-    st.markdown("**Players in Alliance:**")
-    st.write(players)
+    # Collapsible: Player List
+    with st.expander("Players in Alliance", expanded=True):
+        players = sorted(subset['Ruler Name'].unique())
+        st.write(players)
 
-    # Aggregate count over time
-    agg = sub.groupby('date').agg(nations=('Nation ID','count')).reset_index()
+    # Collapsible: Nations Over Time Chart
+    with st.expander("Nations Over Time", expanded=True):
+        # Aggregate count by snapshot date
+        agg = (
+            subset
+            .groupby('date')
+            .agg(nations=('Nation ID', 'count'))
+            .reset_index()
+            .sort_values('date')
+        )
 
-    # Chart
-    chart = alt.Chart(agg).mark_line(point=True).encode(
-        x=alt.X('date:T', title='Date'),
-        y=alt.Y('nations:Q', title='Number of Nations')
-    ).properties(width=800, height=400)
-
-    st.markdown("**Nations Over Time**")
-    st.altair_chart(chart, use_container_width=True)
+        # Interactive Altair line chart
+        base = alt.Chart(agg).encode(
+            x=alt.X('date:T', title='Date'),
+            y=alt.Y('nations:Q', title='Number of Nations'),
+            tooltip=[alt.Tooltip('date:T', title='Date'), alt.Tooltip('nations:Q', title='Count')]
+        )
+        line = base.mark_line()
+        points = base.mark_point().encode(
+            opacity=alt.condition(
+                alt.selection_single(on='mouseover', nearest=True, fields=['date'], empty='none'),
+                alt.value(1), alt.value(0)
+            )
+        )
+        chart = (line + points).properties(width=800, height=400).interactive()
+        st.altair_chart(chart, use_container_width=True)
 
 if __name__ == '__main__':
     main()
-
