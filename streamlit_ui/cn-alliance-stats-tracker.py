@@ -777,7 +777,7 @@ def main():
             
             st.markdown("#### Empty Slots-to-Inactivity Ratio per Nation")
             st.caption("Higher values mean higher priority for Trade Circle offers")
-            st.dataframe(avg_ratio)
+            st.dataframe(avg_ratio.sort_values("Empty-to-Inactivity Ratio", ascending=False))
         
         # (c) Technology Over Time
         if 'Technology' in df_indiv.columns:
