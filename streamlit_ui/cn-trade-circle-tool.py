@@ -64,9 +64,10 @@ def main():
     df['Alliance'] = df['Alliance'].fillna("(No Alliance)")
     df['Ruler Name'] = df['Ruler Name'].fillna("Unknown")
 
-    # Alliance selector
+    # Alliance selector with default
     alliances = sorted(df['Alliance'].unique())
-    selected = st.selectbox("Select Alliance", alliances)
+    default_idx = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
+    selected = st.selectbox("Select Alliance", alliances, index=default_idx)
     subset = df[df['Alliance'] == selected].copy()
     subset = subset.sort_values('date')
 
