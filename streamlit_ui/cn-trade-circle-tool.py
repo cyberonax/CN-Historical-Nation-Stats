@@ -92,26 +92,20 @@ def main():
 
     # Proceed only if we're tracking inactivity
     if 'activity_score' in subset.columns:
-        # Initial filter: drop rows without score
-        filtered = subset.dropna(subset=['activity_score']).copy()
+        # Chart & table container
+        with st.expander("Nation Inactivity Over Time (<14 Days)", expanded=True):
+            # Apply filters for chart only
+            chart_data = subset.dropna(subset=['activity_score']).copy()
+            chart_data = chart_data[chart_data['activity_score'] < 14]
+            if 'Alliance Status' in chart_data.columns:
+                chart_data = chart_data[chart_data['Alliance Status'] != 'Pending']
+            if 'Team' in chart_data.columns and not chart_data['Team'].empty:
+                majority_team = chart_data['Team'].mode()[0]
+                chart_data = chart_data[chart_data['Team'] == majority_team]
 
-        # Exclude nations with high inactivity
-        filtered = filtered[filtered['activity_score'] < 14]
-
-        # Exclude pending alliance status
-        if 'Alliance Status' in filtered.columns:
-            filtered = filtered[filtered['Alliance Status'] != 'Pending']
-
-        # Exclude non-majority team
-        if 'Team' in filtered.columns and not filtered['Team'].empty:
-            majority_team = filtered['Team'].mode()[0]
-            filtered = filtered[filtered['Team'] == majority_team]
-
-        # Show chart & table
-        with st.expander("Nation Inactivity Over Time (Days)", expanded=True):
             # Time series chart per ruler
             sel = alt.selection_single(on='mouseover', fields=['date'], nearest=True, empty='none')
-            base = alt.Chart(filtered).encode(
+            base = alt.Chart(chart_data).encode(
                 x=alt.X('date:T', title='Date'),
                 y=alt.Y('activity_score:Q', title='Days of Inactivity'),
                 color=alt.Color('Ruler Name:N', legend=alt.Legend(title='Ruler')),
@@ -125,9 +119,10 @@ def main():
             st.altair_chart(chart, use_container_width=True)
             st.caption("Lower scores indicate more recent activity.")
 
-            # Compute & display sorted averages
+            # Compute & display averages over entire data (unfiltered)
             avg_inact = (
-                filtered.groupby('Ruler Name')['activity_score']
+                subset.dropna(subset=['activity_score'])
+                .groupby('Ruler Name')['activity_score']
                 .mean()
                 .reset_index()
                 .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
