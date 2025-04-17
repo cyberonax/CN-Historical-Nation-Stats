@@ -1,0 +1,16 @@
+name: Keep Streamlit App Awake
+
+on:
+  schedule:
+    # Runs at minute 0,25,50 of each hour (every ~25 minutes)
+    - cron: '*/25 * * * *'
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Streamlit app
+        run: |
+          # Quietly request your app URL so it counts as activity
+          curl -sSf https://cn-alliance-stats-timeline-tracker.streamlit.app/ -o /dev/null
