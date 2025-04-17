@@ -15,8 +15,8 @@ def parse_date_from_filename(name):
         return None
     tok, z = m.groups()
     hour = 0 if z == '510001' else 12
-    for md in [1,2]:
-        for dd in [1,2]:
+    for md in [1, 2]:
+        for dd in [1, 2]:
             if md + dd + 4 == len(tok):
                 try:
                     mon = int(tok[:md]); day = int(tok[md:md+dd]); year = int(tok[md+dd:])
@@ -67,7 +67,12 @@ def main():
     # Alliance selector
     alliances = sorted(df['Alliance'].unique())
     selected = st.selectbox("Select Alliance", alliances)
-    subset = df[df['Alliance'] == selected]
+    subset = df[df['Alliance'] == selected].copy()
+    subset = subset.sort_values('date')
+
+    # Collapsible: Raw Alliance Data Table
+    with st.expander("Raw Alliance Data", expanded=False):
+        st.dataframe(subset)
 
     # Collapsible: Player List
     with st.expander("Players in Alliance", expanded=True):
@@ -82,10 +87,10 @@ def main():
             .groupby('date')
             .agg(nations=('Nation ID', 'count'))
             .reset_index()
-            .sort_values('date')
         )
 
-        # Interactive Altair line chart
+        # Interactive Altair line + points chart
+        date_sel = alt.selection_single(on='mouseover', fields=['date'], nearest=True, empty='none')
         base = alt.Chart(agg).encode(
             x=alt.X('date:T', title='Date'),
             y=alt.Y('nations:Q', title='Number of Nations'),
@@ -93,11 +98,8 @@ def main():
         )
         line = base.mark_line()
         points = base.mark_point().encode(
-            opacity=alt.condition(
-                alt.selection_single(on='mouseover', nearest=True, fields=['date'], empty='none'),
-                alt.value(1), alt.value(0)
-            )
-        )
+            opacity=alt.condition(date_sel, alt.value(1), alt.value(0))
+        ).add_selection(date_sel)
         chart = (line + points).properties(width=800, height=400).interactive()
         st.altair_chart(chart, use_container_width=True)
 
