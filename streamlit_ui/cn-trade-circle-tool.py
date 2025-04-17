@@ -86,13 +86,27 @@ def main():
     with st.expander("Raw Alliance Data", expanded=False):
         st.dataframe(subset)
 
-    # Collapsible: Players & Inactivity
-    with st.expander("Players in Alliance", expanded=True):
-        players = sorted(subset['Ruler Name'].unique())
-        st.markdown("**Players:**")
-        st.write(players)
-
+    # Collapsible: Nation Inactivity Over Time & Averages
+    with st.expander("Nation Inactivity Over Time (Days)", expanded=True):
         if 'activity_score' in subset.columns:
+            # Chart: each nation's inactivity over time
+            base = alt.Chart(subset.dropna(subset=['activity_score'])).encode(
+                x=alt.X('date:T', title='Date'),
+                y=alt.Y('activity_score:Q', title='Days of Inactivity'),
+                color=alt.Color('Ruler Name:N', legend=alt.Legend(title='Ruler')),
+                tooltip=[alt.Tooltip('date:T', title='Date'), 'Ruler Name', alt.Tooltip('activity_score:Q', title='Inactivity')]
+            )
+            line = base.mark_line()
+            points = base.mark_point().encode(
+                opacity=alt.condition(
+                    alt.selection_single(on='mouseover', fields=['date'], nearest=True, empty='none'),
+                    alt.value(1), alt.value(0)
+                )
+            )
+            chart = (line + points).properties(width=800, height=400).interactive()
+            st.altair_chart(chart, use_container_width=True)
+
+            # Table: all-time averages by ruler
             avg_inact = (
                 subset.dropna(subset=['activity_score'])
                 .groupby('Ruler Name')['activity_score']
@@ -102,31 +116,6 @@ def main():
             )
             st.markdown("**All Time Average Days of Inactivity:**")
             st.dataframe(avg_inact)
-
-    # Collapsible: Nation Inactivity Over Time Chart
-    with st.expander("Nation Inactivity Over Time (Days)", expanded=True):
-        if 'activity_score' in subset.columns:
-            # Compute average by snapshot date
-            agg = (
-                subset.dropna(subset=['activity_score'])
-                .groupby('date')
-                .agg(avg_inactivity=('activity_score', 'mean'))
-                .reset_index()
-            )
-
-            # Interactive Altair line + points chart
-            date_sel = alt.selection_single(on='mouseover', fields=['date'], nearest=True, empty='none')
-            base = alt.Chart(agg).encode(
-                x=alt.X('date:T', title='Date'),
-                y=alt.Y('avg_inactivity:Q', title='Days of Inactivity'),
-                tooltip=[alt.Tooltip('date:T', title='Date'), alt.Tooltip('avg_inactivity:Q', title='Avg Inactivity')]
-            )
-            line = base.mark_line()
-            points = base.mark_point().encode(
-                opacity=alt.condition(date_sel, alt.value(1), alt.value(0))
-            ).add_selection(date_sel)
-            chart = (line + points).properties(width=800, height=400).interactive()
-            st.altair_chart(chart, use_container_width=True)
         else:
             st.info("No Activity data available for this alliance.")
 
