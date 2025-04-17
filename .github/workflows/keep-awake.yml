@@ -13,4 +13,5 @@ jobs:
       - name: Ping Streamlit app
         run: |
           # Quietly request your app URL so it counts as activity
-          curl -sSf https://cn-alliance-stats-timeline-tracker.streamlit.app/ -o /dev/null
+          curl -sSf https://cn-alliance-stats-timeline-tracker.streamlit.app/  -o /dev/null
+          curl -sSf https://cn-trade-circle-tool.streamlit.app/                -o /dev/null
