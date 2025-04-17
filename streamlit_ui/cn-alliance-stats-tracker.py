@@ -755,6 +755,7 @@ def main():
                 df_indiv.dropna(subset=['Empty Slots Count'])
                 .groupby(["Nation ID", "Ruler Name"])["Empty Slots Count"]
                 .mean()
+                .sort_values(ascending=False)
                 .reset_index()
                 .rename(columns={"Empty Slots Count": "All Time Average Empty Trade Slots"})
             )
