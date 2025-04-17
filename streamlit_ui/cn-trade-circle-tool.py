@@ -78,15 +78,16 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
     )
     line = base.mark_line()
     if show_hover:
-        nearest = alt.selection(type='single', nearest=True, on='mouseover', fields=['date'], empty='none')
+        nearest  = alt.selection(type='single', nearest=True, on='mouseover', fields=['date'], empty='none')
         selectors = base.mark_point().encode(opacity=alt.value(0)).add_selection(nearest)
-        points = line.mark_point().encode(opacity=alt.condition(nearest, alt.value(1), alt.value(0)))
-        text   = line.mark_text(align='left', dx=5, dy=-5).encode(text=alt.condition(nearest, "Ruler Name:N", alt.value('')))
-        tooltip = [alt.Tooltip("date:T", title="Date"),
-                   "Ruler Name",
-                   alt.Tooltip(f"{metric}:Q", title=title)]
-        chart = alt.layer(line, selectors, points, text).encode(tooltip=tooltip)\
-                   .properties(width=800, height=400).interactive()
+        points    = line.mark_point().encode(opacity=alt.condition(nearest, alt.value(1), alt.value(0)))
+        text      = line.mark_text(align='left', dx=5, dy=-5)\
+                        .encode(text=alt.condition(nearest, "Ruler Name:N", alt.value('')))
+        tooltip   = [alt.Tooltip("date:T", title="Date"), "Ruler Name", alt.Tooltip(f"{metric}:Q", title=title)]
+        chart = alt.layer(line, selectors, points, text)\
+                   .encode(tooltip=tooltip)\
+                   .properties(width=800, height=400)\
+                   .interactive()
     else:
         chart = line.properties(width=800, height=400).interactive()
     return chart
@@ -98,19 +99,22 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
 def main():
     st.title("Cyber Nations | Trade Circle Tool")
 
+    # Load data
     df = load_data()
     if df.empty:
         st.error("No data loaded.")
         return
 
+    # Preprocess
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date'])
-    df['date'] = df['snapshot_date']
-    df['Alliance']   = df['Alliance'].fillna("None")
-    df['Ruler Name'] = df['Ruler Name'].fillna("None")
+    df['date']          = df['snapshot_date']
+    df['Alliance']      = df['Alliance'].fillna("None")
+    df['Ruler Name']    = df['Ruler Name'].fillna("None")
 
     if 'Activity' in df.columns:
         df = map_activity_scores(df)
 
+    # Alliance selector
     alliances = sorted(df['Alliance'].unique())
     default_idx = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
     selected_alliance = st.selectbox("Select Alliance", alliances, index=default_idx)
@@ -120,15 +124,32 @@ def main():
         st.warning("No data for that alliance.")
         return
 
+    # Raw data expander
     with st.expander("Raw Alliance Data", expanded=False):
         st.dataframe(df_all)
 
     st.markdown(f"### Charts for Alliance: {selected_alliance}")
 
-    latest_date = df_all['date'].max()
-    current_rulers = set(df_all[df_all['date'] == latest_date]['Ruler Name'])
+    # Determine most recent snapshot
+    latest_date    = df_all['date'].max()
+    latest_snapshot = df_all[df_all['date'] == latest_date]
+
+    # Compute majority Team in the latest snapshot
+    majority_team = latest_snapshot['Team'].mode().iloc[0]
+
+    # Identify current rulers still present
+    current_rulers = set(latest_snapshot['Ruler Name'])
+
+    # Prepare per-nation history for current rulers
     df_indiv = df_all[df_all['Ruler Name'].isin(current_rulers)].copy()
 
+    # Further filter out Pending statuses and non-majority team
+    df_indiv = df_indiv[
+        (df_indiv['Alliance Status'] != "Pending") &
+        (df_indiv['Team'] == majority_team)
+    ].copy()
+
+    # Compute all-time average inactivity per ruler
     if 'activity_score' in df_indiv.columns:
         avg_activity = (
             df_indiv
@@ -139,9 +160,13 @@ def main():
             .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
         )
 
-        valid = set(avg_activity[avg_activity['All Time Average Days of Inactivity'] < 14]['Ruler Name'])
+        # Filter by average inactivity < 14 days
+        valid = set(
+            avg_activity[avg_activity['All Time Average Days of Inactivity'] < 14]['Ruler Name']
+        )
         df_filtered = df_indiv[df_indiv['Ruler Name'].isin(valid)].copy()
 
+        # Render chart & table
         with st.expander("Nation Inactivity Over Time (<14 Days)", expanded=True):
             chart = altair_individual_metric_chart(
                 df_filtered,
@@ -152,10 +177,12 @@ def main():
             st.altair_chart(chart, use_container_width=True)
             st.caption("Lower scores indicate more recent activity.")
 
-            # Reset row numbers to 1,2,3...
-            avg_display = avg_activity[avg_activity['Ruler Name'].isin(valid)] \
-                .sort_values('All Time Average Days of Inactivity', ascending=False) \
+            # Prepare average table, reset row IDs
+            avg_display = (
+                avg_activity[avg_activity['Ruler Name'].isin(valid)]
+                .sort_values('All Time Average Days of Inactivity', ascending=False)
                 .reset_index(drop=True)
+            )
             avg_display.index = avg_display.index + 1
 
             st.markdown("#### All Time Average Days of Inactivity")
