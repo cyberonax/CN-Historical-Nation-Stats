@@ -54,17 +54,17 @@ def load_data(folder: str = 'downloaded_zips') -> pd.DataFrame:
 # -- Main App --------------------------------------------------------
 def main():
     st.title("Cyber Nations | Trade Circle Tool")
-    
-    # Load data
+
+    # Load raw data
     df = load_data()
     if df.empty:
         return
 
-    # Clean and prepare
+    # Clean & prepare
     df['Alliance'] = df['Alliance'].fillna("(No Alliance)")
     df['Ruler Name'] = df['Ruler Name'].fillna("Unknown")
 
-    # Map activity to days of inactivity
+    # Map text activity to numeric inactivity days
     if 'Activity' in df.columns:
         activity_mapping = {
             "Active In The Last 3 Days": 3,
@@ -79,21 +79,39 @@ def main():
     alliances = sorted(df['Alliance'].unique())
     default_idx = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
     selected = st.selectbox("Select Alliance", alliances, index=default_idx)
+
+    # Subset for alliance
     subset = df[df['Alliance'] == selected].copy()
     subset = subset.sort_values('date')
 
     st.markdown(f"### Charts for Alliance: {selected}")
 
-    # Raw Data
+    # Raw data preview
     with st.expander("Raw Alliance Data", expanded=False):
         st.dataframe(subset)
 
-    # Nation Inactivity Over Time and Averages
+    # Proceed only if we're tracking inactivity
     if 'activity_score' in subset.columns:
-        with st.expander("Nation Inactivity Over Time (Days)"):
-            # Chart: each nation's inactivity over time
-            date_sel = alt.selection_single(on='mouseover', fields=['date'], nearest=True, empty='none')
-            base = alt.Chart(subset.dropna(subset=['activity_score'])).encode(
+        # Initial filter: drop rows without score
+        filtered = subset.dropna(subset=['activity_score']).copy()
+
+        # Exclude nations with high inactivity
+        filtered = filtered[filtered['activity_score'] < 14]
+
+        # Exclude pending alliance status
+        if 'Alliance Status' in filtered.columns:
+            filtered = filtered[filtered['Alliance Status'] != 'Pending']
+
+        # Exclude non-majority team
+        if 'Team' in filtered.columns and not filtered['Team'].empty:
+            majority_team = filtered['Team'].mode()[0]
+            filtered = filtered[filtered['Team'] == majority_team]
+
+        # Show chart & table
+        with st.expander("Nation Inactivity Over Time (Days)", expanded=True):
+            # Time series chart per ruler
+            sel = alt.selection_single(on='mouseover', fields=['date'], nearest=True, empty='none')
+            base = alt.Chart(filtered).encode(
                 x=alt.X('date:T', title='Date'),
                 y=alt.Y('activity_score:Q', title='Days of Inactivity'),
                 color=alt.Color('Ruler Name:N', legend=alt.Legend(title='Ruler')),
@@ -101,36 +119,22 @@ def main():
             )
             line = base.mark_line()
             points = base.mark_point().encode(
-                opacity=alt.condition(date_sel, alt.value(1), alt.value(0))
-            ).add_selection(date_sel)
+                opacity=alt.condition(sel, alt.value(1), alt.value(0))
+            ).add_selection(sel)
             chart = (line + points).properties(width=800, height=400).interactive()
             st.altair_chart(chart, use_container_width=True)
             st.caption("Lower scores indicate more recent activity.")
 
-            # Determine majority team in this alliance
-            majority_team = None
-            if 'Team' in subset.columns and not subset['Team'].mode().empty:
-                majority_team = subset['Team'].mode()[0]
-
-            # Filter nations: inactivity >=14, status Pending, team not majority
-            filtered = subset.dropna(subset=['activity_score'])
-            filtered = filtered[
-                (filtered['activity_score'] >= 14) &
-                (filtered['Alliance Status'] == 'Pending') &
-                (filtered['Team'] != majority_team)
-            ]
-
-            # Compute and display per-nation averages (sorted descending)
-            avg_activity = (
-                filtered
-                .groupby('Ruler Name')['activity_score']
+            # Compute & display sorted averages
+            avg_inact = (
+                filtered.groupby('Ruler Name')['activity_score']
                 .mean()
                 .reset_index()
                 .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
                 .sort_values('All Time Average Days of Inactivity', ascending=False)
             )
-            st.markdown("#### Pending Nations with High Inactivity and Non-majority Team")
-            st.dataframe(avg_activity)
+            st.markdown("#### All Time Average Days of Inactivity per Nation")
+            st.dataframe(avg_inact)
     else:
         st.info("No Activity data available for this alliance.")
 
