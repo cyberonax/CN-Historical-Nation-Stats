@@ -732,9 +732,9 @@ def main():
                     df_indiv.dropna(subset=['activity_score'])
                     .groupby(["Nation ID", "Ruler Name"])["activity_score"]
                     .mean()
-                    .rename(columns={"activity_score": "All Time Average Days of Inactivity"})
-                    .sort_values('All Time Average Days of Inactivity', ascending=False)
+                    .sort_values('activity_score', ascending=False)
                     .reset_index(drop=True)
+                    .rename(columns={"activity_score": "All Time Average Days of Inactivity"})
                 )
                 st.markdown("#### All Time Average Daily Inactivity per Nation")
                 st.dataframe(avg_activity)
