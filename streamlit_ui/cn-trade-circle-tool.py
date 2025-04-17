@@ -36,8 +36,11 @@ def parse_date_from_filename(filename):
                     continue
     return None
 
-@st.cache_data(show_spinner="Loading historical data...", ttl=60*60*24)
 def load_data():
+    """
+    Load and concatenate all snapshots from the downloaded_zips folder
+    on every run, ensuring always-fresh data.
+    """
     dfs = []
     zip_folder = Path("downloaded_zips")
     if not zip_folder.exists():
@@ -96,13 +99,12 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
             "Ruler Name",
             alt.Tooltip(f"{metric}:Q", title=title)
         ]
-        chart = alt.layer(line, selectors, points, text)\
-                   .encode(tooltip=tooltip)\
-                   .properties(width=800, height=400)\
-                   .interactive()
+        return alt.layer(line, selectors, points, text)\
+                  .encode(tooltip=tooltip)\
+                  .properties(width=800, height=400)\
+                  .interactive()
     else:
-        chart = line.properties(width=800, height=400).interactive()
-    return chart
+        return line.properties(width=800, height=400).interactive()
 
 ##############################
 # STREAMLIT APP
@@ -111,13 +113,12 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
 def main():
     st.title("Cyber Nations | Trade Circle Tool")
 
-    # Load data
+    # Always load fresh data
     df = load_data()
     if df.empty:
         st.error("No data loaded.")
         return
 
-    # Preprocess
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date'])
     df['date']          = df['snapshot_date']
     df['Alliance']      = df['Alliance'].fillna("None")
@@ -136,33 +137,27 @@ def main():
         st.warning("No data for that alliance.")
         return
 
-    # Raw data expander
-    with st.expander("Raw Alliance Data", expanded=False):
+    # Raw data (collapsed by default)
+    with st.expander("Raw Alliance Data"):
         st.dataframe(df_all)
 
     st.markdown(f"### Charts for Alliance: {selected_alliance}")
 
-    # Determine most recent snapshot
+    # Most recent snapshot and majority team
     latest_date     = df_all['date'].max()
     latest_snapshot = df_all[df_all['date'] == latest_date]
+    majority_team   = latest_snapshot['Team'].mode().iloc[0]
+    current_rulers  = set(latest_snapshot['Ruler Name'])
 
-    # Compute majority Team in the latest snapshot
-    majority_team = latest_snapshot['Team'].mode().iloc[0]
-
-    # Identify current rulers still present
-    current_rulers = set(latest_snapshot['Ruler Name'])
-
-    # Prepare per-nation history for current rulers
-    df_indiv = df_all[df_all['Ruler Name'].isin(current_rulers)].copy()
-
-    # Further filter out Pending statuses and non-majority team
-    df_indiv = df_indiv[
-        (df_indiv['Alliance Status'] != "Pending") &
-        (df_indiv['Team'] == majority_team)
+    # Build per-nation history filtered to current, non-pending, majority-team members
+    df_indiv = df_all[
+        (df_all['Ruler Name'].isin(current_rulers)) &
+        (df_all['Alliance Status'] != "Pending") &
+        (df_all['Team'] == majority_team)
     ].copy()
 
-    # Compute all-time average inactivity per ruler
     if 'activity_score' in df_indiv.columns:
+        # Compute and filter by all-time average inactivity
         avg_activity = (
             df_indiv
             .dropna(subset=['activity_score'])
@@ -171,66 +166,48 @@ def main():
             .reset_index()
             .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
         )
-
-        # Filter by average inactivity < 14 days
-        valid = set(
-            avg_activity[avg_activity['All Time Average Days of Inactivity'] < 14]['Ruler Name']
-        )
+        valid = set(avg_activity[avg_activity['All Time Average Days of Inactivity'] < 14]['Ruler Name'])
         df_filtered = df_indiv[df_indiv['Ruler Name'].isin(valid)].copy()
 
-        # Render chart & table
-        with st.expander("Nation Inactivity Over Time In (Days)", expanded=True):
-            chart = altair_individual_metric_chart(
-                df_filtered,
-                "activity_score",
-                "Activity Score (Days)",
-                show_hover=True
+        # Inactivity chart & table (collapsed by default)
+        with st.expander("Nation Inactivity Over Time In (Days)"):
+            st.altair_chart(
+                altair_individual_metric_chart(
+                    df_filtered,
+                    "activity_score",
+                    "Activity Score (Days)",
+                    show_hover=True
+                ),
+                use_container_width=True
             )
-            st.altair_chart(chart, use_container_width=True)
             st.caption(
                 "Lower scores indicate more recent activity. "
                 "Showcasing only nations under 14 days of all time average days of inactivity."
             )
 
-            # Prepare average table, reset row IDs
             avg_display = (
                 avg_activity[avg_activity['Ruler Name'].isin(valid)]
                 .sort_values('All Time Average Days of Inactivity', ascending=False)
                 .reset_index(drop=True)
             )
-            avg_display.index = avg_display.index + 1
-
+            avg_display.index += 1
             st.markdown("#### All Time Average Days of Inactivity")
             st.dataframe(avg_display)
 
-        # New collapsible section: Nation Details
-        with st.expander("Nation Details (<14 Days)", expanded=False):
-            # Build details DataFrame
+        # Nation details (collapsed by default)
+        with st.expander("Nation Details (<14 Days)"):
             details = df_filtered.copy()
-            # Combine resources
             details["Resource 1+2"] = details.apply(get_resource_1_2, axis=1)
-            # Compute Days Old since 'Created'
             details["Created"] = pd.to_datetime(details["Created"], errors='coerce')
-            today = pd.Timestamp.now()
-            details["Days Old"] = (today - details["Created"]).dt.days
-            # Nation Drill Link
+            details["Days Old"] = (pd.Timestamp.now() - details["Created"]).dt.days
             details["Nation Drill Link"] = (
                 "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
                 + details["Nation ID"].astype(str)
             )
-            # Select and order columns
             details = details[
-                [
-                    "Ruler Name",
-                    "Resource 1+2",
-                    "Alliance",
-                    "Team",
-                    "Days Old",
-                    "Nation Drill Link",
-                    "Activity"
-                ]
+                ["Ruler Name", "Resource 1+2", "Alliance", "Team", "Days Old", "Nation Drill Link", "Activity"]
             ].reset_index(drop=True)
-            details.index = details.index + 1  # reset row numbers
+            details.index += 1
             st.dataframe(details)
 
 if __name__ == "__main__":
