@@ -70,6 +70,14 @@ def map_activity_scores(df):
     df['activity_score'] = df['Activity'].map(mapping)
     return df
 
+def get_resource_1_2(row):
+    """Combine Resource 1 and Resource 2 into one field."""
+    r1 = str(row.get("Resource 1", "")).strip()
+    r2 = str(row.get("Resource 2", "")).strip()
+    if r1 and r2:
+        return f"{r1}, {r2}"
+    return r1 or r2 or ""
+
 def altair_individual_metric_chart(df, metric, title, show_hover=True):
     base = alt.Chart(df).encode(
         x=alt.X("date:T", title="Date"),
@@ -78,12 +86,16 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
     )
     line = base.mark_line()
     if show_hover:
-        nearest  = alt.selection(type='single', nearest=True, on='mouseover', fields=['date'], empty='none')
+        nearest   = alt.selection(type='single', nearest=True, on='mouseover', fields=['date'], empty='none')
         selectors = base.mark_point().encode(opacity=alt.value(0)).add_selection(nearest)
         points    = line.mark_point().encode(opacity=alt.condition(nearest, alt.value(1), alt.value(0)))
         text      = line.mark_text(align='left', dx=5, dy=-5)\
-                        .encode(text=alt.condition(nearest, "Ruler Name:N", alt.value('')))
-        tooltip   = [alt.Tooltip("date:T", title="Date"), "Ruler Name", alt.Tooltip(f"{metric}:Q", title=title)]
+                         .encode(text=alt.condition(nearest, "Ruler Name:N", alt.value('')))
+        tooltip   = [
+            alt.Tooltip("date:T", title="Date"),
+            "Ruler Name",
+            alt.Tooltip(f"{metric}:Q", title=title)
+        ]
         chart = alt.layer(line, selectors, points, text)\
                    .encode(tooltip=tooltip)\
                    .properties(width=800, height=400)\
@@ -131,7 +143,7 @@ def main():
     st.markdown(f"### Charts for Alliance: {selected_alliance}")
 
     # Determine most recent snapshot
-    latest_date    = df_all['date'].max()
+    latest_date     = df_all['date'].max()
     latest_snapshot = df_all[df_all['date'] == latest_date]
 
     # Compute majority Team in the latest snapshot
@@ -190,6 +202,36 @@ def main():
 
             st.markdown("#### All Time Average Days of Inactivity")
             st.dataframe(avg_display)
+
+        # New collapsible section: Nation Details
+        with st.expander("Nation Details (<14 Days)", expanded=False):
+            # Build details DataFrame
+            details = df_filtered.copy()
+            # Combine resources
+            details["Resource 1+2"] = details.apply(get_resource_1_2, axis=1)
+            # Compute Days Old since 'Created'
+            details["Created"] = pd.to_datetime(details["Created"], errors='coerce')
+            today = pd.Timestamp.now()
+            details["Days Old"] = (today - details["Created"]).dt.days
+            # Nation Drill Link
+            details["Nation Drill Link"] = (
+                "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
+                + details["Nation ID"].astype(str)
+            )
+            # Select and order columns
+            details = details[
+                [
+                    "Ruler Name",
+                    "Resource 1+2",
+                    "Alliance",
+                    "Team",
+                    "Days Old",
+                    "Nation Drill Link",
+                    "Activity"
+                ]
+            ].reset_index(drop=True)
+            details.index = details.index + 1  # reset row numbers
+            st.dataframe(details)
 
 if __name__ == "__main__":
     main()
