@@ -124,7 +124,6 @@ def main():
     df['date']          = df['snapshot_date']
     df['Alliance']      = df['Alliance'].fillna("None")
     df['Ruler Name']    = df['Ruler Name'].fillna("None")
-
     if 'Activity' in df.columns:
         df = map_activity_scores(df)
 
@@ -213,9 +212,10 @@ def main():
             avg_map = avg_activity.set_index('Ruler Name')['All Time Average Days of Inactivity']
             details["Activity"] = details["Ruler Name"].map(avg_map)
 
+            # Include Alliance Status at the end
             details = details[
                 ["Ruler Name", "Resource 1+2", "Alliance", "Team",
-                 "Days Old", "Nation Drill Link", "Activity"]
+                 "Days Old", "Nation Drill Link", "Activity", "Alliance Status"]
             ].reset_index(drop=True)
             details.index += 1
             st.dataframe(details)
@@ -233,9 +233,11 @@ def main():
             omitted["Activity"] = omitted["Ruler Name"].map(
                 avg_activity.set_index('Ruler Name')['All Time Average Days of Inactivity']
             )
+
+            # Include Alliance Status at the end
             omitted = omitted[
                 ["Ruler Name", "Resource 1+2", "Alliance", "Team",
-                 "Days Old", "Nation Drill Link", "Activity"]
+                 "Days Old", "Nation Drill Link", "Activity", "Alliance Status"]
             ].reset_index(drop=True)
             omitted.index += 1
             st.dataframe(omitted)
