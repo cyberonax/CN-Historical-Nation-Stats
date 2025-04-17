@@ -107,16 +107,29 @@ def main():
             st.altair_chart(chart, use_container_width=True)
             st.caption("Lower scores indicate more recent activity.")
 
+            # Determine majority team in this alliance
+            majority_team = None
+            if 'Team' in subset.columns and not subset['Team'].mode().empty:
+                majority_team = subset['Team'].mode()[0]
+
+            # Filter nations: inactivity >=14, status Pending, team not majority
+            filtered = subset.dropna(subset=['activity_score'])
+            filtered = filtered[
+                (filtered['activity_score'] >= 14) &
+                (filtered['Alliance Status'] == 'Pending') &
+                (filtered['Team'] != majority_team)
+            ]
+
             # Compute and display per-nation averages (sorted descending)
             avg_activity = (
-                subset.dropna(subset=['activity_score'])
+                filtered
                 .groupby('Ruler Name')['activity_score']
                 .mean()
                 .reset_index()
                 .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
                 .sort_values('All Time Average Days of Inactivity', ascending=False)
             )
-            st.markdown("#### All Time Average Days of Inactivity per Nation")
+            st.markdown("#### Pending Nations with High Inactivity and Non-majority Team")
             st.dataframe(avg_activity)
     else:
         st.info("No Activity data available for this alliance.")
