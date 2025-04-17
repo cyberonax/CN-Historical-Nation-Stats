@@ -23,8 +23,8 @@ def parse_date_from_filename(filename):
         return None
     date_token, zip_id = match.groups()
     hour = 0 if zip_id == "510001" else 12
-    for m_digits in [1,2]:
-        for d_digits in [1,2]:
+    for m_digits in [1, 2]:
+        for d_digits in [1, 2]:
             if m_digits + d_digits + 4 == len(date_token):
                 try:
                     month = int(date_token[:m_digits])
@@ -144,20 +144,23 @@ def main():
 
     st.markdown(f"### Charts for Alliance: {selected_alliance}")
 
-    # Most recent snapshot and majority team
-    latest_date     = df_all['date'].max()
-    latest_snapshot = df_all[df_all['date'] == latest_date]
-    majority_team   = latest_snapshot['Team'].mode().iloc[0]
+    # Identify most recent snapshot and majority team
+    latest_date      = df_all['date'].max()
+    latest_snapshot  = df_all[df_all['date'] == latest_date]
+    majority_team    = latest_snapshot['Team'].mode().iloc[0]
 
-    # Build per-nation history filtered to current, non-pending, majority-team members
-    df_indiv = df_all[
-        (df_all['Ruler Name'].isin(latest_snapshot['Ruler Name'])) &
-        (df_all['Alliance Status'] != "Pending") &
-        (df_all['Team'] == majority_team)
+    # Filter current members by non-pending & majority team
+    current_snapshot_filtered = latest_snapshot[
+        (latest_snapshot['Alliance Status'] != "Pending") &
+        (latest_snapshot['Team'] == majority_team)
     ].copy()
+    current_rulers = set(current_snapshot_filtered['Ruler Name'])
+
+    # Build history for those current rulers
+    df_indiv = df_all[df_all['Ruler Name'].isin(current_rulers)].copy()
 
     if 'activity_score' in df_indiv.columns:
-        # Compute and filter by all-time average inactivity
+        # Compute all-time averages for those rulers
         avg_activity = (
             df_indiv
             .dropna(subset=['activity_score'])
@@ -167,10 +170,11 @@ def main():
             .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
         )
 
+        # Keep only those with avg < 14 days
         valid = set(avg_activity[avg_activity['All Time Average Days of Inactivity'] < 14]['Ruler Name'])
         df_filtered = df_indiv[df_indiv['Ruler Name'].isin(valid)].copy()
 
-        # Inactivity chart & table (collapsed by default)
+        # Inactivity chart & averages (collapsed by default)
         with st.expander("Nation Inactivity Over Time In (Days)"):
             st.altair_chart(
                 altair_individual_metric_chart(
@@ -195,35 +199,46 @@ def main():
             st.markdown("#### All Time Average Days of Inactivity")
             st.dataframe(avg_display)
 
-        # Nation details (collapsed by default), based on most recent snapshot
+        # Nation details for that same valid set, from the latest snapshot
         with st.expander("Nation Details"):
-            # start from latest_snapshot, apply same filters and valid set
-            details = latest_snapshot[
-                (latest_snapshot['Alliance Status'] != "Pending") &
-                (latest_snapshot['Team'] == majority_team) &
-                (latest_snapshot['Ruler Name'].isin(valid))
-            ].copy()
-            # combine resources
+            details = current_snapshot_filtered[current_snapshot_filtered['Ruler Name'].isin(valid)].copy()
             details["Resource 1+2"] = details.apply(get_resource_1_2, axis=1)
-            # compute Days Old since 'Created'
-            details["Created"]     = pd.to_datetime(details["Created"], errors='coerce')
-            details["Days Old"]    = (pd.Timestamp.now() - details["Created"]).dt.days
-            # nation drill link
+            details["Created"]      = pd.to_datetime(details["Created"], errors='coerce')
+            details["Days Old"]     = (pd.Timestamp.now() - details["Created"]).dt.days
             details["Nation Drill Link"] = (
                 "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
                 + details["Nation ID"].astype(str)
             )
-            # map in the all-time average inactivity as the Activity column
+            # Map average inactivity into the Activity column
             avg_map = avg_activity.set_index('Ruler Name')['All Time Average Days of Inactivity']
             details["Activity"] = details["Ruler Name"].map(avg_map)
 
-            # select and order
             details = details[
                 ["Ruler Name", "Resource 1+2", "Alliance", "Team",
                  "Days Old", "Nation Drill Link", "Activity"]
             ].reset_index(drop=True)
             details.index += 1
             st.dataframe(details)
+
+        # Nations omitted from latest snapshot filtering
+        with st.expander("Omitted Nations"):
+            omitted = latest_snapshot[~latest_snapshot['Ruler Name'].isin(valid)].copy()
+            omitted["Resource 1+2"] = omitted.apply(get_resource_1_2, axis=1)
+            omitted["Created"]      = pd.to_datetime(omitted["Created"], errors='coerce')
+            omitted["Days Old"]     = (pd.Timestamp.now() - omitted["Created"]).dt.days
+            omitted["Nation Drill Link"] = (
+                "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
+                + omitted["Nation ID"].astype(str)
+            )
+            omitted["Activity"] = omitted["Ruler Name"].map(
+                avg_activity.set_index('Ruler Name')['All Time Average Days of Inactivity']
+            )
+            omitted = omitted[
+                ["Ruler Name", "Resource 1+2", "Alliance", "Team",
+                 "Days Old", "Nation Drill Link", "Activity"]
+            ].reset_index(drop=True)
+            omitted.index += 1
+            st.dataframe(omitted)
 
 if __name__ == "__main__":
     main()
