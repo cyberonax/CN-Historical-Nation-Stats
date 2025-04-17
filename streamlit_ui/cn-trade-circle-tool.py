@@ -94,7 +94,7 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
         chart = alt.layer(line, selectors, points, text).encode(tooltip=tooltip)\
                    .properties(width=800, height=400).interactive()
     else:
-        chart = line.mark_line().properties(width=800, height=400).interactive()
+        chart = line.properties(width=800, height=400).interactive()
     return chart
 
 ##############################
@@ -112,7 +112,6 @@ def main():
 
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date'])
     df['date'] = df['snapshot_date']
-    # fill missing Alliance/Ruler
     df['Alliance']   = df['Alliance'].fillna("None")
     df['Ruler Name'] = df['Ruler Name'].fillna("None")
 
@@ -137,8 +136,12 @@ def main():
 
     st.markdown(f"### Charts for Alliance: {selected_alliance}")
 
-    # Prepare per-nation DataFrame
-    df_indiv = df_all.copy()
+    # Identify nations present in the most recent snapshot
+    latest_date = df_all['date'].max()
+    current_rulers = set(df_all[df_all['date'] == latest_date]['Ruler Name'])
+
+    # Prepare per-nation DataFrame: only those still present most recently
+    df_indiv = df_all[df_all['Ruler Name'].isin(current_rulers)].copy()
 
     # Compute all-time average inactivity per ruler
     if 'activity_score' in df_indiv.columns:
