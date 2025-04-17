@@ -729,11 +729,12 @@ def main():
                 
                 # Compute each nation's average activity score across snapshots.
                 avg_activity = (
-                    df_indiv.dropna(subset=['activity_score'])
+                    df_indiv
+                    .dropna(subset=["activity_score"])
                     .groupby(["Nation ID", "Ruler Name"])["activity_score"]
                     .mean()
-                    .sort_values('activity_score', ascending=False)
-                    .reset_index(drop=True)
+                    .sort_values(ascending=False)               # ← no "by=", just descending
+                    .reset_index()                              # now turns it into a DataFrame
                     .rename(columns={"activity_score": "All Time Average Days of Inactivity"})
                 )
                 st.markdown("#### All Time Average Daily Inactivity per Nation")
