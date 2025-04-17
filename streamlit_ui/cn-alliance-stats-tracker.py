@@ -795,6 +795,7 @@ def main():
                 
                 # Display Technology Growth Per Day Table.
                 tech_growth_df = compute_growth(df_indiv.dropna(subset=['Technology']), "Technology")
+                tech_growth_df = tech_growth_df.sort_values("Technology Growth Per Day", ascending=False).reset_index(drop=True)
                 st.markdown("#### Technology Growth Per Day")
                 st.dataframe(tech_growth_df)
         
@@ -811,6 +812,7 @@ def main():
                 
                 # Display Infrastructure Growth Per Day Table.
                 infra_growth_df = compute_growth(df_indiv.dropna(subset=['Infrastructure']), "Infrastructure")
+                infra_growth_df = infra_growth_df.sort_values("Infrastructure Growth Per Day", ascending=False).reset_index(drop=True)
                 st.markdown("#### Infrastructure Growth Per Day")
                 st.dataframe(infra_growth_df)
         
@@ -827,6 +829,7 @@ def main():
                 
                 # Display Base Land Growth Per Day Table.
                 base_land_growth_df = compute_growth(df_indiv.dropna(subset=['Base Land']), "Base Land")
+                base_land_growth_df = base_land_growth_df.sort_values("Base Land Growth Per Day", ascending=False).reset_index(drop=True)
                 st.markdown("#### Base Land Growth Per Day")
                 st.dataframe(base_land_growth_df)
         
@@ -843,6 +846,7 @@ def main():
                 
                 # Display Strength Growth Per Day Table.
                 strength_growth_df = compute_growth(df_indiv.dropna(subset=['Strength']), "Strength")
+                strength_growth_df = strength_growth_df.sort_values("Strength Growth Per Day", ascending=False).reset_index(drop=True)
                 st.markdown("#### Strength Growth Per Day")
                 st.dataframe(strength_growth_df)
         
@@ -858,6 +862,7 @@ def main():
                 st.altair_chart(chart, use_container_width=True)
                 # Display Attacking Casualties Growth Per Day Table.
                 attack_growth_df = compute_growth(df_indiv.dropna(subset=['Attacking Casualties']), "Attacking Casualties")
+                attack_growth_df = attack_growth_df.sort_values("Attacking Casualties Growth Per Day", ascending=False).reset_index(drop=True)
                 st.markdown("#### Attacking Casualties Growth Per Day")
                 st.dataframe(attack_growth_df)
         
@@ -873,6 +878,7 @@ def main():
                 st.altair_chart(chart, use_container_width=True)
                 # Display Defensive Casualties Growth Per Day Table.
                 defense_growth_df = compute_growth(df_indiv.dropna(subset=['Defensive Casualties']), "Defensive Casualties")
+                defense_growth_df = defense_growth_df.sort_values("Defensive Casualties Growth Per Day", ascending=False).reset_index(drop=True)
                 st.markdown("#### Defensive Casualties Growth Per Day")
                 st.dataframe(defense_growth_df)
     
