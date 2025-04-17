@@ -776,7 +776,7 @@ def main():
             avg_ratio["Empty-to-Inactivity Ratio"] = avg_ratio["All Time Average Empty Trade Slots"] / avg_ratio["All Time Average Inactivity"].replace(0, None)
             
             st.markdown("#### Empty Slots-to-Inactivity Ratio per Nation")
-            st.caption("Higher values mean higher priority for Trade Circle offers")
+            st.caption("Higher values suggest higher priority for Trade Circle offers.")
             st.dataframe(avg_ratio.sort_values("Empty-to-Inactivity Ratio", ascending=False))
         
         # (c) Technology Over Time
