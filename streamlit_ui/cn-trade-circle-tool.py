@@ -119,6 +119,7 @@ def main():
         st.error("No data loaded.")
         return
 
+    # Preprocess
     df['snapshot_date'] = pd.to_datetime(df['snapshot_date'])
     df['date']          = df['snapshot_date']
     df['Alliance']      = df['Alliance'].fillna("None")
@@ -156,8 +157,8 @@ def main():
         (df_all['Team'] == majority_team)
     ].copy()
 
+    # Compute all-time average inactivity per ruler
     if 'activity_score' in df_indiv.columns:
-        # Compute and filter by all-time average inactivity
         avg_activity = (
             df_indiv
             .dropna(subset=['activity_score'])
@@ -166,7 +167,11 @@ def main():
             .reset_index()
             .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
         )
-        valid = set(avg_activity[avg_activity['All Time Average Days of Inactivity'] < 14]['Ruler Name'])
+
+        # Filter by average inactivity < 14 days
+        valid = set(
+            avg_activity[avg_activity['All Time Average Days of Inactivity'] < 14]['Ruler Name']
+        )
         df_filtered = df_indiv[df_indiv['Ruler Name'].isin(valid)].copy()
 
         # Inactivity chart & table (collapsed by default)
@@ -195,17 +200,21 @@ def main():
             st.dataframe(avg_display)
 
         # Nation details (collapsed by default)
-        with st.expander("Nation Details (<14 Days)"):
+        with st.expander("Nation Details"):
             details = df_filtered.copy()
             details["Resource 1+2"] = details.apply(get_resource_1_2, axis=1)
             details["Created"] = pd.to_datetime(details["Created"], errors='coerce')
             details["Days Old"] = (pd.Timestamp.now() - details["Created"]).dt.days
+            # Map Activity to All Time Average Days of Inactivity
+            avg_map = avg_activity.set_index('Ruler Name')['All Time Average Days of Inactivity']
+            details["Activity"] = details["Ruler Name"].map(avg_map)
             details["Nation Drill Link"] = (
                 "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
                 + details["Nation ID"].astype(str)
             )
             details = details[
-                ["Ruler Name", "Resource 1+2", "Alliance", "Team", "Days Old", "Nation Drill Link", "Activity"]
+                ["Ruler Name", "Resource 1+2", "Alliance", "Team",
+                 "Days Old", "Nation Drill Link", "Activity"]
             ].reset_index(drop=True)
             details.index += 1
             st.dataframe(details)
