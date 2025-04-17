@@ -49,7 +49,10 @@ def parse_date_from_filename(filename):
                     continue
     return None
 
-@st.cache_data(show_spinner="Loading historical data...")
+@st.cache_data(                # ← added ttl so cache expires daily
+    show_spinner="Loading historical data...",
+    ttl=60 * 60 * 24           # cache for 24 hours (in seconds)
+)
 def load_data():
     """
     Loads data from all zip files in the "downloaded_zips" folder.
@@ -341,8 +344,7 @@ def main():
         df_raw['activity_score'] = df_raw['Activity'].map(activity_mapping)
     
     # Save the full dataframe to session_state to support alternative lookups.
-    if "df" not in st.session_state:
-        st.session_state.df = df_raw
+    st.session_state.df = df_raw
 
     # Create three tabs: Aggregated Alliance Metrics, Individual Nation Metrics, and Inactivity Tracker.
     tabs = st.tabs(["Aggregated Alliance Metrics", "Individual Nation Metrics", "Inactivity Tracker"])
