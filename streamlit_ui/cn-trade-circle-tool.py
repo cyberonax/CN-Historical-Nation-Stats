@@ -82,14 +82,17 @@ def main():
     subset = df[df['Alliance'] == selected].copy()
     subset = subset.sort_values('date')
 
-    # Collapsible: Raw Alliance Data Table
+    st.markdown(f"### Charts for Alliance: {selected}")
+
+    # Raw Data
     with st.expander("Raw Alliance Data", expanded=False):
         st.dataframe(subset)
 
-    # Collapsible: Nation Inactivity Over Time & Averages
-    with st.expander("Nation Inactivity Over Time (Days)", expanded=True):
-        if 'activity_score' in subset.columns:
+    # Nation Inactivity Over Time and Averages
+    if 'activity_score' in subset.columns:
+        with st.expander("Nation Inactivity Over Time (Days)"):
             # Chart: each nation's inactivity over time
+            date_sel = alt.selection_single(on='mouseover', fields=['date'], nearest=True, empty='none')
             base = alt.Chart(subset.dropna(subset=['activity_score'])).encode(
                 x=alt.X('date:T', title='Date'),
                 y=alt.Y('activity_score:Q', title='Days of Inactivity'),
@@ -98,26 +101,25 @@ def main():
             )
             line = base.mark_line()
             points = base.mark_point().encode(
-                opacity=alt.condition(
-                    alt.selection_single(on='mouseover', fields=['date'], nearest=True, empty='none'),
-                    alt.value(1), alt.value(0)
-                )
-            )
+                opacity=alt.condition(date_sel, alt.value(1), alt.value(0))
+            ).add_selection(date_sel)
             chart = (line + points).properties(width=800, height=400).interactive()
             st.altair_chart(chart, use_container_width=True)
+            st.caption("Lower scores indicate more recent activity.")
 
-            # Table: all-time averages by ruler
-            avg_inact = (
+            # Compute and display per-nation averages (sorted descending)
+            avg_activity = (
                 subset.dropna(subset=['activity_score'])
                 .groupby('Ruler Name')['activity_score']
                 .mean()
                 .reset_index()
                 .rename(columns={'activity_score': 'All Time Average Days of Inactivity'})
+                .sort_values('All Time Average Days of Inactivity', ascending=False)
             )
-            st.markdown("**All Time Average Days of Inactivity:**")
-            st.dataframe(avg_inact)
-        else:
-            st.info("No Activity data available for this alliance.")
+            st.markdown("#### All Time Average Days of Inactivity per Nation")
+            st.dataframe(avg_activity)
+    else:
+        st.info("No Activity data available for this alliance.")
 
 if __name__ == '__main__':
     main()
