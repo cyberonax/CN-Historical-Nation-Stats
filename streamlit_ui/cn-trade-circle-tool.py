@@ -167,7 +167,7 @@ def main():
         df_filtered = df_indiv[df_indiv['Ruler Name'].isin(valid)].copy()
 
         # Render chart & table
-        with st.expander("Nation Inactivity Over Time (<14 Days)", expanded=True):
+        with st.expander("Nation Inactivity Over Time In (Days)", expanded=True):
             chart = altair_individual_metric_chart(
                 df_filtered,
                 "activity_score",
@@ -175,7 +175,10 @@ def main():
                 show_hover=True
             )
             st.altair_chart(chart, use_container_width=True)
-            st.caption("Lower scores indicate more recent activity.")
+            st.caption(
+                "Lower scores indicate more recent activity. "
+                "Showcasing only nations under 14 days of all time average days of inactivity."
+            )
 
             # Prepare average table, reset row IDs
             avg_display = (
