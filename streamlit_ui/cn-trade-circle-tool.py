@@ -717,31 +717,35 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             })
         
                 rec_df = pd.DataFrame(rec_records).sort_values(
-                    ["Peace Mode Level","Trade Circle","Ruler Name"],
+                    ["Peace Mode Level", "Trade Circle", "Ruler Name"],
                     key=lambda col: (
-                        col.map(level_order) if col.name=="Peace Mode Level"
-                        else col if col.name=="Trade Circle"
+                        col.map(level_order) if col.name == "Peace Mode Level"
+                        else col if col.name == "Trade Circle"
                         else col.str.lower()
                     )
                 ).reset_index(drop=True)
                 rec_df.index += 1
-        
-                styled_rec = rec_df.style.set_properties(
+
+                # define which columns to show
+                columns = [
+                    "Peace Mode Level", "Trade Circle", "Ruler Name",
+                    "Current Resource 1+2", "Alliance", "Team", "Days Old",
+                    "Nation Drill Link", "Activity",
+                    "Assigned Resource 1+2", "Assigned Valid Resource Combination"
+                ]
+
+                # allow wrapping in the long combo column
+                styled_rec = rec_df[columns].style.set_properties(
                     subset=["Assigned Valid Resource Combination"],
                     **{
-                        "white-space": "normal",     # allow wrapping
-                        "max-width": "600px",         # at most 600px wide
-                        "text-align": "left"          # optional, nicer alignment
+                        "white-space": "normal",
+                        "max-width": "600px",
+                        "text-align": "left"
                     }
                 )
-                
+
                 st.markdown("##### Assign Peacetime Recommended Resources")
                 st.dataframe(styled_rec, use_container_width=True)
-                    "Peace Mode Level","Trade Circle","Ruler Name",
-                    "Current Resource 1+2","Alliance","Team","Days Old",
-                    "Nation Drill Link","Activity",
-                    "Assigned Resource 1+2","Assigned Valid Resource Combination"
-                ]])
 
         # ——— Assign Wartime Recommended Resources ———
         with st.expander("Assign Wartime Recommended Resources"):
@@ -855,19 +859,26 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             })
         
                 # build and display the War Mode DataFrame
-                war_df = pd.DataFrame(war_records)
-                # sort by level, then circle, then ruler
-                war_df = war_df.sort_values(
-                    ["Peace Mode Level","Trade Circle","Ruler Name"],
+                war_df = pd.DataFrame(war_records).sort_values(
+                    ["Peace Mode Level", "Trade Circle", "Ruler Name"],
                     key=lambda col: (
-                        col.map(level_order) if col.name=="Peace Mode Level"
-                        else col if col.name=="Trade Circle"
+                        col.map(level_order) if col.name == "Peace Mode Level"
+                        else col if col.name == "Trade Circle"
                         else col.str.lower()
                     )
                 ).reset_index(drop=True)
                 war_df.index += 1
-        
-                styled_war = war_df.style.set_properties(
+
+                # define exactly which columns to show
+                columns = [
+                    "Peace Mode Level", "Trade Circle", "Ruler Name",
+                    "Current Resource 1+2", "Alliance", "Team", "Days Old",
+                    "Nation Drill Link", "Activity",
+                    "Assigned Resource 1+2", "Assigned Valid Resource Combination"
+                ]
+
+                # allow wrapping on the long combo column
+                styled_war = war_df[columns].style.set_properties(
                     subset=["Assigned Valid Resource Combination"],
                     **{
                         "white-space": "normal",
@@ -875,15 +886,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         "text-align": "left"
                     }
                 )
-                
+
                 st.markdown("##### Assign Wartime Recommended Resources")
                 st.dataframe(styled_war, use_container_width=True)
-                st.dataframe(war_df[[
-                    "Peace Mode Level","Trade Circle","Ruler Name",
-                    "Current Resource 1+2","Alliance","Team","Days Old",
-                    "Nation Drill Link","Activity",
-                    "Assigned Resource 1+2","Assigned Valid Resource Combination"
-                ]])
 
 if __name__ == "__main__":
     main()
