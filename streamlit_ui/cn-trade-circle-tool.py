@@ -527,24 +527,24 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     leftovers_df.index = range(1, len(leftovers_df)+1)
                     st.dataframe(leftovers_df[leftover_cols])
 
-        # ——— Optimal Peace Mode Trade Circles via Min‑Cost Max‑Flow (ILP) ———
+        # ——— Optimal Peace Mode Trade Circles via ILP with Circle‐Usage Penalty ———
         with st.expander("Optimal Peace Mode Trade Circles"):
-            # guard against no input
+            # ensure there is processed data
             if 'final_df' not in locals() or final_df.empty:
-                st.markdown("_No processed Trade Circles — please fill in the Input Trade Circles above._")
+                st.markdown("_No processed Trade Circles to optimize. Please fill in the Input Trade Circles above._")
             else:
-                import math
                 try:
                     import pulp
                 except ImportError:
                     st.error(
-                        "🚨 PuLP is not installed. "
+                        "🚨 *PuLP* is not installed. "
                         "Add `pulp` to your dependencies (e.g. in requirements.txt) and redeploy."
                     )
                 else:
+                    import math
+
                     level_order = {'Level A': 0, 'Level B': 1, 'Level C': 2}
                     optimal_records = []
-                    leftover_records = []
 
                     for level in ['Level A', 'Level B', 'Level C']:
                         # slice out this level
@@ -556,47 +556,63 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         orig_circle = dict(zip(nations, df_lvl['Trade Circle']))
                         existing_cs = sorted(df_lvl['Trade Circle'].unique())
 
-                        # compute how many new circles we may need to fill everyone
+                        # how many circles we need at minimum
                         total_n = len(nations)
-                        needed  = math.ceil(total_n / 6) - len(existing_cs)
-                        max_new = max(needed, 0)
+                        required_circles = math.ceil(total_n / 6)
 
-                        new_cs    = list(range(existing_cs[-1]+1, existing_cs[-1]+1 + max_new))
-                        all_cs    = existing_cs + new_cs
+                        # build the full set of circle IDs to choose from
+                        max_existing = existing_cs[-1] if existing_cs else 0
+                        # allow exactly as many new circles as needed to reach required_circles
+                        new_cs_count = max(required_circles - len(existing_cs), 0)
+                        new_cs = list(range(max_existing + 1, max_existing + 1 + new_cs_count))
+                        all_cs = existing_cs + new_cs
 
-                        # build ILP: maximize assignments, minimize reassign/new‑circle cost
+                        # set up ILP
                         prob = pulp.LpProblem(f"TradeCircle_{level}", pulp.LpMaximize)
+                        # x[p,c] = 1 if nation p is assigned to circle c
                         x = pulp.LpVariable.dicts(
                             "x",
                             ((p, c) for p in nations for c in all_cs),
                             cat='Binary'
                         )
+                        # y[c] = 1 if circle c is used at all
+                        y = pulp.LpVariable.dicts(
+                            "y",
+                            all_cs,
+                            cat='Binary'
+                        )
 
-                        # each nation exactly one circle
+                        # each nation assigned to exactly one circle
                         for p in nations:
                             prob += pulp.lpSum(x[p, c] for c in all_cs) == 1
 
-                        # each circle holds ≤ 6
+                        # capacity and usage constraints per circle
                         for c in all_cs:
-                            prob += pulp.lpSum(x[p, c] for p in nations) <= 6
+                            # at most 6 per circle
+                            prob += pulp.lpSum(x[p, c] for p in nations) <= 6 * y[c]
+                            # no assignment unless circle is "on"
+                            for p in nations:
+                                prob += x[p, c] <= y[c]
 
-                        # objective:
-                        #   +1000 per assigned nation (encourages full assignment)
-                        #   –1 penalty if moved from original, –6 penalty if new circle
+                        # do not exceed the minimum needed circles
+                        prob += pulp.lpSum(y[c] for c in all_cs) <= required_circles
+
+                        # objective: maximize assignments, minimize circles used, minimize reassignments
                         flow = pulp.lpSum(x[p, c] for p in nations for c in all_cs)
-                        penalty = pulp.lpSum(
+                        circle_penalty = pulp.lpSum(y[c] for c in all_cs)
+                        reassign_cost = pulp.lpSum(
                             x[p, c] * (
-                                0
-                                if c == orig_circle[p]
+                                0 if c == orig_circle[p]
                                 else (1 if c in existing_cs else 6)
                             )
                             for p in nations for c in all_cs
                         )
-                        prob += 1000 * flow - penalty
+                        # big weight on flow, moderate on circle usage, light on reassignment
+                        prob += 1000 * flow - 10 * circle_penalty - reassign_cost
 
                         prob.solve(pulp.PULP_CBC_CMD(msg=False))
 
-                        # read out solution
+                        # collect the optimized assignments
                         for p in nations:
                             for c in all_cs:
                                 if pulp.value(x[p, c]) == 1:
@@ -605,11 +621,11 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                                     optimal_records.append(row)
                                     break
 
-                    # build and display
+                    # build and display the final optimized DataFrame
                     opt_df = pd.DataFrame(optimal_records)
                     opt_df = opt_df.sort_values(
                         ['Peace Mode Level', 'Trade Circle', 'Ruler Name'],
-                        key=lambda col: col.map(level_order) if col.name=='Peace Mode Level' else col
+                        key=lambda col: col.map(level_order) if col.name == 'Peace Mode Level' else col
                     ).reset_index(drop=True)
                     opt_df.index += 1
 
@@ -620,17 +636,17 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         "Days Old", "Nation Drill Link", "Activity"
                     ]])
 
-                    # any truly leftover (should be none if max_new was enough)
+                    # show any leftovers (if required_circles was underestimated)
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
                     st.markdown("##### Leftover Players")
                     if leftovers.empty:
                         st.markdown("_None_")
                     else:
-                        leftovers.index = range(1, len(leftovers)+1)
+                        leftovers.index = range(1, len(leftovers) + 1)
                         st.dataframe(leftovers[[
-                            "Ruler Name","Resource 1+2","Alliance","Team",
-                            "Days Old","Nation Drill Link","Activity"
+                            "Ruler Name", "Resource 1+2", "Alliance", "Team",
+                            "Days Old", "Nation Drill Link", "Activity"
                         ]])
 
 if __name__ == "__main__":
