@@ -1,4 +1,6 @@
 streamlit
 pandas
 altair
+numpy
 pulp
+scipy
