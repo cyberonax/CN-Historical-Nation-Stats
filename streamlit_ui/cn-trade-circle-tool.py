@@ -895,15 +895,37 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     height=60,
                 )
 
-        # ——— Download everything as a single XLSX ———
+        # ——— Download everything as a single XLSX (with auto‑fit columns) ———
         if 'rec_df' in locals() and 'war_df' in locals():
             buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            # use xlsxwriter so we can set column widths
+            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                 rec_df.to_excel(writer, sheet_name="Peacetime", index=False)
                 war_df.to_excel(writer, sheet_name="Wartime",    index=False)
+
+                workbook    = writer.book
+                peac_sheet  = writer.sheets["Peacetime"]
+                war_sheet   = writer.sheets["Wartime"]
+
+                # auto‑fit Peacetime columns
+                for idx, col in enumerate(rec_df.columns):
+                    max_len = max(
+                        rec_df[col].astype(str).map(len).max(),
+                        len(col)
+                    ) + 2
+                    peac_sheet.set_column(idx, idx, max_len)
+
+                # auto‑fit Wartime columns
+                for idx, col in enumerate(war_df.columns):
+                    max_len = max(
+                        war_df[col].astype(str).map(len).max(),
+                        len(col)
+                    ) + 2
+                    war_sheet.set_column(idx, idx, max_len)
+
             buffer.seek(0)
 
-            # build filename: AllianceName_trade_circles_YYYY-MM-DD.xlsx
+            # build filename: AllianceName_Optimized_Trade_Circles_YYYY-MM-DD.xlsx
             alliance_safe = selected_alliance.replace(" ", "_")
             date_str      = latest_date.strftime("%Y-%m-%d")
             download_name = f"{alliance_safe}_Optimized_Trade_Circles_{date_str}.xlsx"
