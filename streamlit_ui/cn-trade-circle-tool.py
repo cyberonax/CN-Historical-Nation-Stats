@@ -409,8 +409,15 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                 # — Unmatched Players —
                 st.markdown("#### Unmatched Players")
-                # pick off any valid nation-details rows whose Ruler Name did NOT appear in our trade circles
                 unmatched = details[~details["Ruler Name"].isin(tc_df["Ruler Name"])].copy()
+                
+                # sort alphabetically (case‑insensitive) and reset index
+                unmatched = (
+                    unmatched
+                    .sort_values(by="Ruler Name", key=lambda col: col.str.lower())
+                    .reset_index(drop=True)
+                )
+                
                 st.dataframe(
                     unmatched[
                         [
@@ -424,7 +431,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         ]
                     ]
                 )
-
 
 
 if __name__ == "__main__":
