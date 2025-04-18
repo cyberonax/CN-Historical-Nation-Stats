@@ -700,13 +700,18 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     "Assigned Resource 1+2", "Assigned Valid Resource Combination"
                 ]
 
-                styled_rec = rec_df[columns].style.set_properties(
-                    subset=["Assigned Valid Resource Combination"],
-                    **{
-                        "white-space": "normal",
-                        "max-width": "1200px",
-                        "text-align": "left"
-                    }
+                styled_rec = (
+                    rec_df[columns]
+                      .style
+                      .format({"Activity": "{:.1f}"})
+                      .set_properties(
+                          subset=["Assigned Valid Resource Combination"],
+                          **{
+                              "white-space": "normal",
+                              "max-width": "1200px",
+                              "text-align": "left"
+                          }
+                      )
                 )
 
                 st.markdown("##### Assign Peacetime Recommended Resources")
@@ -858,13 +863,18 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     "Assigned Resource 1+2", "Assigned Valid Resource Combination"
                 ]
 
-                styled_war = war_df[columns].style.set_properties(
-                    subset=["Assigned Valid Resource Combination"],
-                    **{
-                        "white-space": "normal",
-                        "max-width": "1200px",
-                        "text-align": "left"
-                    }
+                styled_war = (
+                    war_df[columns]
+                      .style
+                      .format({"Activity": "{:.1f}"})
+                      .set_properties(
+                          subset=["Assigned Valid Resource Combination"],
+                          **{
+                              "white-space": "normal",
+                              "max-width": "1200px",
+                              "text-align": "left"
+                          }
+                      )
                 )
 
                 st.markdown("##### Assign Wartime Recommended Resources")
