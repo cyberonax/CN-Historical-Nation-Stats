@@ -323,19 +323,19 @@ def main():
             trade_input  = st.text_area("Trade Circles (one Ruler Name per line)", height=200)
             filter_input = st.text_area("Filter Out Players (one per line)", height=100)
         
-            # — Parse into blocks of names, drop blank/x lines (already case‑insensitive for "x") —
-            blocks  = trade_input.split("\n\n")
+            # — Parse into blocks of names; blank lines split circles, but we no longer drop 'x' lines —
+            blocks = trade_input.split("\n\n")
             circles = []
             for blk in blocks:
                 names = [
                     line.strip()
                     for line in blk.splitlines()
-                    if line.strip() and line.strip().lower() != "x"
+                    if line.strip()  # only drop truly blank lines
                 ]
                 if names:
                     circles.append(names)
         
-            # — Build record list & DataFrame, include a lowercase key —
+            # — Build DataFrame with lowercase merge_key for case‑insensitive matching —
             records = []
             for i, circle in enumerate(circles):
                 for name in circle:
@@ -349,12 +349,12 @@ def main():
             if tc_df.empty:
                 st.warning("No valid Trade Circle entries detected.")
             else:
-                # — Prepare snapshot with the same lowercase key and combined resources —
+                # — Prepare snapshot with same merge_key & combined resources —
                 snap = latest_snapshot.copy()
-                snap["merge_key"]     = snap["Ruler Name"].str.lower()
-                snap["Resource 1+2"]  = snap.apply(get_resource_1_2, axis=1)
+                snap["merge_key"]    = snap["Ruler Name"].str.lower()
+                snap["Resource 1+2"] = snap.apply(get_resource_1_2, axis=1)
         
-                # — Merge on the lowercase key —
+                # — Merge on merge_key, bringing in your stats —
                 tc_df = tc_df.merge(
                     snap[[
                         "merge_key",
@@ -368,7 +368,7 @@ def main():
                     how="inner"
                 )
         
-                # — Compute Days Old, Drill Link, map Activity exactly as before —
+                # — Compute Days Old, Drill Link, Activity —
                 tc_df["Created"] = pd.to_datetime(tc_df["Created"], errors="coerce")
                 tc_df["Days Old"] = (pd.Timestamp.now() - tc_df["Created"]).dt.days
                 tc_df["Nation Drill Link"] = (
@@ -376,14 +376,13 @@ def main():
                     + tc_df["Nation ID"].astype(str)
                 )
                 tc_df["Activity"] = tc_df["Ruler Name"].map(
-                    avg_activity
-                      .set_index("Ruler Name")["All Time Average Days of Inactivity"]
+                    avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"]
                 )
         
                 # — Case‑insensitive filter‑out set —
                 filter_set = {ln.strip().lower() for ln in filter_input.splitlines() if ln.strip()}
         
-                # — Apply filters on lowercase key, then drop merge_key —
+                # — Apply filters & drop merge_key —
                 tc_df = (
                     tc_df[
                         (tc_df["Activity"] < 14) &
@@ -407,6 +406,7 @@ def main():
                     "Nation Drill Link",
                     "Activity"
                 ]])
+
 
 
 
