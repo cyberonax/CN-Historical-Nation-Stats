@@ -174,7 +174,7 @@ def main():
         df_filtered = df_indiv[df_indiv['Ruler Name'].isin(valid)].copy()
 
         # Inactivity chart & averages (collapsed by default)
-        with st.expander("Nation Inactivity Over Time In Days (<14 Days All Time Average Inactivity)"):
+        with st.expander("Nation Inactivity Over Time In Days (Average Inactivity < 14 Days, Alliance Status =/= Pending, Team = Majority Alliance Team)"):
             st.altair_chart(
                 altair_individual_metric_chart(
                     df_filtered,
@@ -199,7 +199,7 @@ def main():
             st.dataframe(avg_display)
 
         # Nation details for that same valid set, from the latest snapshot
-        with st.expander("Nation Details (Average Inactivity < 14 Days, Alliance Status =/= Pending, Team = Majority Alliance Team)"):
+        with st.expander("Nation Details (Ruler Name | Resource 1+2 | Alliance | Team | Days Old | Nation Drill Link | Activity)"):
             details = current_snapshot_filtered[current_snapshot_filtered['Ruler Name'].isin(valid)].copy()
             details["Resource 1+2"] = details.apply(get_resource_1_2, axis=1)
             details["Created"]      = pd.to_datetime(details["Created"], errors='coerce')
