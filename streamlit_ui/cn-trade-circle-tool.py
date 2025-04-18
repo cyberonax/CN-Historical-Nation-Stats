@@ -393,12 +393,13 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     .drop(columns="merge_key")
                     .reset_index(drop=True)
                 )
-                
-                # shift the index so it starts at 1 instead of 0
-                unmatched.index = unmatched.index + 1
-                
+
                 # — Processed Trade Circles —
                 st.markdown("#### Processed Trade Circles")
+                # Reset to 0…n‑1 then shift to 1…n
+                tc_df = tc_df.reset_index(drop=True)
+                tc_df.index = tc_df.index + 1
+            
                 st.dataframe(tc_df[[
                     "Trade Circle",
                     "Ruler Name",
@@ -413,17 +414,14 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 # — Unmatched Players —
                 st.markdown("#### Unmatched Players")
                 unmatched = details[~details["Ruler Name"].isin(tc_df["Ruler Name"])].copy()
-                
-                # sort alphabetically (case‑insensitive) and reset index
+                # sort case‑insensitive and reset to 0…n‑1
                 unmatched = (
                     unmatched
                     .sort_values(by="Ruler Name", key=lambda col: col.str.lower())
                     .reset_index(drop=True)
                 )
-                
                 # shift the index so it starts at 1 instead of 0
                 unmatched.index = unmatched.index + 1
-                
                 st.dataframe(
                     unmatched[
                         [
