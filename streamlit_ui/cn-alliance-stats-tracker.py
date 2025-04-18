@@ -1007,7 +1007,7 @@ def main():
                 st.table(alt_df)
 
     # Download All Data to Excel button
-    if st.button("Download All Data as Excel"):
+    if st.button("Download All Data to Excel"):
         # Prepare in-memory output
         output = io.BytesIO()
         
@@ -1018,27 +1018,27 @@ def main():
             "Individual Nation Metrics": df_indiv
         }
         # Include inactivity tracker if it was generated
-        if 'alt_df' in locals():
+        if "alt_df" in locals():
             dfs["Inactivity Tracker"] = alt_df
-    
+
         # Write to Excel with auto column widths
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
             for sheet_name, df in dfs.items():
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
                 worksheet = writer.sheets[sheet_name]
-                # Auto-fit columns
+                # Auto-fit each column
                 for idx, col in enumerate(df.columns):
-                    series = df[col].astype(str)
-                    max_len = max(series.map(len).max(), len(col)) + 2
+                    max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
                     worksheet.set_column(idx, idx, max_len)
-        # ← removed writer.save()
-        
+
+        # Seek back to start so Streamlit can read the buffer
         output.seek(0)
+
         # Provide download button
         st.download_button(
             label="Download All Data to Excel",
             data=output.getvalue(),
-            file_name="CyberNations_timeline_stats_data.xlsx",
+            file_name="CyberNations_Timeline_Stats_Data.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
