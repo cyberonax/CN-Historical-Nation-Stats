@@ -651,128 +651,135 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         ]])
 
         # ——— Assign Recommended Resources ———
-        with st.expander("Assign Recommended Resources"):
-            import numpy as np
-            from scipy.optimize import linear_sum_assignment
-            from collections import Counter
+        # — only show once opt_df has been built —
+        if 'opt_df' in locals() and not opt_df.empty:
+            with st.expander("Assign Recommended Resources"):
+                import numpy as np
+                from scipy.optimize import linear_sum_assignment
+                from collections import Counter
         
-            def find_best_match(current, combos):
-                best, best_score = None, float("inf")
-                for combo in combos:
-                    missing = set(combo) - set(current)
-                    extra   = set(current) - set(combo)
-                    score   = len(missing) + len(extra)
-                    if score < best_score:
-                        best_score = score
-                        best       = combo
-                return best
+                def find_best_match(current, combos):
+                    best, best_score = None, float("inf")
+                    for combo in combos:
+                        missing = set(combo) - set(current)
+                        extra   = set(current) - set(combo)
+                        score   = len(missing) + len(extra)
+                        if score < best_score:
+                            best_score = score
+                            best       = combo
+                    return best
         
-            valid_combos = {
-                "Level A": [ [r.strip() for r in line.split(",")] for line in peace_a_text.splitlines() if line.strip() ],
-                "Level B": [ [r.strip() for r in line.split(",")] for line in peace_b_text.splitlines() if line.strip() ],
-                "Level C": [ [r.strip() for r in line.split(",")] for line in peace_c_text.splitlines() if line.strip() ],
-            }
+                valid_combos = {
+                    "Level A": [ [r.strip() for r in line.split(",")] for line in peace_a_text.splitlines() if line.strip() ],
+                    "Level B": [ [r.strip() for r in line.split(",")] for line in peace_b_text.splitlines() if line.strip() ],
+                    "Level C": [ [r.strip() for r in line.split(",")] for line in peace_c_text.splitlines() if line.strip() ],
+                }
         
-            rec_records = []
-            for level in ["Level A", "Level B", "Level C"]:
-                lvl_df = opt_df[opt_df["Peace Mode Level"] == level]
-                if lvl_df.empty:
-                    continue
+                rec_records = []
+                for level in ["Level A", "Level B", "Level C"]:
+                    lvl_df = opt_df[opt_df["Peace Mode Level"] == level]
+                    if lvl_df.empty:
+                        continue
         
-                for circle in sorted(lvl_df["Trade Circle"].unique()):
-                    group = lvl_df[lvl_df["Trade Circle"] == circle].reset_index(drop=True)
+                    for circle in sorted(lvl_df["Trade Circle"].unique()):
+                        group = lvl_df[lvl_df["Trade Circle"] == circle].reset_index(drop=True)
         
-                    # 1) collect all resources in circle
-                    all_res = []
-                    for s in group["Resource 1+2"]:
-                        all_res += [r.strip() for r in s.split(",") if r.strip()]
-                    current_sorted = sorted(set(all_res))
+                        # 1) collect all current resources
+                        all_res = []
+                        for s in group["Resource 1+2"]:
+                            all_res += [r.strip() for r in s.split(",") if r.strip()]
+                        current_sorted = sorted(set(all_res))
         
-                    # 2) pick best 12‐resource combo
-                    best_combo = find_best_match(current_sorted, valid_combos[level])
-                    combo_str  = ", ".join(best_combo)
+                        # 2) pick best 12-resource combo
+                        best_combo = find_best_match(current_sorted, valid_combos[level])
+                        combo_str  = ", ".join(best_combo)
         
-                    # 3) lock‐in duplicates using a Counter
-                    avail = Counter(best_combo)
-                    fixed = {}
-                    rem_players = []
-                    for _, row in group.iterrows():
-                        ruler = row["Ruler Name"]
-                        curr   = tuple(r.strip() for r in row["Resource 1+2"].split(","))
-                        if avail[curr[0]] > 0 and avail[curr[1]] > 0:
-                            fixed[ruler] = f"{curr[0]}, {curr[1]}"
-                            avail[curr[0]] -= 1
-                            avail[curr[1]] -= 1
-                        else:
-                            rem_players.append(ruler)
+                        # 3) lock-in duplicates using Counter
+                        avail = Counter(best_combo)
+                        fixed = {}
+                        rem_players = []
+                        for _, row in group.iterrows():
+                            ruler = row["Ruler Name"]
+                            curr   = tuple(r.strip() for r in row["Resource 1+2"].split(","))
+                            if avail[curr[0]] > 0 and avail[curr[1]] > 0:
+                                # FIXED: record their exact pair, and decrement availability
+                                fixed[ruler] = f"{curr[0]}, {curr[1]}"
+                                avail[curr[0]] -= 1
+                                avail[curr[1]] -= 1
+                            else:
+                                rem_players.append(ruler)
         
-                    # 4) build slices from remaining resources
-                    rem_resources = list(avail.elements())
-                    m = len(rem_players)
-                    slices = [ rem_resources[2*i:2*i+2] for i in range(m) ]
+                        # 4) build slices out of remaining resources
+                        rem_resources = list(avail.elements())
+                        m = len(rem_players)
+                        slices = [ rem_resources[2*i:2*i+2] for i in range(m) ]
         
-                    # 5) Hungarian on remaining players
-                    cost = np.zeros((m, m), dtype=int)
-                    for i, ruler in enumerate(rem_players):
-                        curr = sorted(r for r in group.loc[group["Ruler Name"]==ruler, "Resource 1+2"].iloc[0].split(","))
-                        for j, sl in enumerate(slices):
-                            common = set(curr).intersection(set(sl))
-                            cost[i,j] = 2 - len(common)
-                    rows, cols = linear_sum_assignment(cost)
+                        # 5) Hungarian on the remaining players
+                        cost = np.zeros((m, m), dtype=int)
+                        for i, ruler in enumerate(rem_players):
+                            curr = sorted(r for r in group.loc[group["Ruler Name"]==ruler, "Resource 1+2"].iloc[0].split(","))
+                            for j, sl in enumerate(slices):
+                                common = set(curr).intersection(set(sl))
+                                cost[i,j] = 2 - len(common)
+                        rows, cols = linear_sum_assignment(cost)
         
-                    # 6a) record fixed players
-                    for ruler, pair in fixed.items():
-                        row = group[group["Ruler Name"] == ruler].iloc[0]
-                        rec_records.append({
-                            "Peace Mode Level": level,
-                            "Trade Circle":     circle,
-                            "Ruler Name":       ruler,
-                            "Current Resource 1+2": row["Resource 1+2"],
-                            "Alliance":         row["Alliance"],
-                            "Team":             row["Team"],
-                            "Days Old":         row["Days Old"],
-                            "Nation Drill Link":row["Nation Drill Link"],
-                            "Activity":         row["Activity"],
-                            "Assigned Resource 1+2": "No Change",
-                            "Assigned Valid Resource Combination": combo_str
-                        })
+                        # 6a) record all the fixed players (now listing their actual pair)
+                        for ruler, pair in fixed.items():
+                            row = group[group["Ruler Name"] == ruler].iloc[0]
+                            rec_records.append({
+                                "Peace Mode Level": level,
+                                "Trade Circle":     circle,
+                                "Ruler Name":       ruler,
+                                "Current Resource 1+2": row["Resource 1+2"],
+                                "Alliance":         row["Alliance"],
+                                "Team":             row["Team"],
+                                "Days Old":         row["Days Old"],
+                                "Nation Drill Link":row["Nation Drill Link"],
+                                "Activity":         row["Activity"],
+                                "Assigned Resource 1+2": pair,
+                                "Assigned Valid Resource Combination": combo_str
+                            })
         
-                    # 6b) record Hungarian assignments
-                    for i, j in zip(rows, cols):
-                        ruler = rem_players[i]
-                        sl    = slices[j]
-                        row   = group[group["Ruler Name"] == ruler].iloc[0]
-                        rec_records.append({
-                            "Peace Mode Level": level,
-                            "Trade Circle":     circle,
-                            "Ruler Name":       ruler,
-                            "Current Resource 1+2": row["Resource 1+2"],
-                            "Alliance":         row["Alliance"],
-                            "Team":             row["Team"],
-                            "Days Old":         row["Days Old"],
-                            "Nation Drill Link":row["Nation Drill Link"],
-                            "Activity":         row["Activity"],
-                            "Assigned Resource 1+2": f"{sl[0]}, {sl[1]}",
-                            "Assigned Valid Resource Combination": combo_str
-                        })
+                        # 6b) record Hungarian‐assigned players
+                        for i, j in zip(rows, cols):
+                            ruler = rem_players[i]
+                            sl    = slices[j]
+                            row   = group[group["Ruler Name"] == ruler].iloc[0]
+                            rec_records.append({
+                                "Peace Mode Level": level,
+                                "Trade Circle":     circle,
+                                "Ruler Name":       ruler,
+                                "Current Resource 1+2": row["Resource 1+2"],
+                                "Alliance":         row["Alliance"],
+                                "Team":             row["Team"],
+                                "Days Old":         row["Days Old"],
+                                "Nation Drill Link":row["Nation Drill Link"],
+                                "Activity":         row["Activity"],
+                                "Assigned Resource 1+2": f"{sl[0]}, {sl[1]}",
+                                "Assigned Valid Resource Combination": combo_str
+                            })
         
-            rec_df = pd.DataFrame(rec_records).sort_values(
-                ["Peace Mode Level","Trade Circle","Ruler Name"],
-                key=lambda col: (
-                    col.map(level_order) if col.name=="Peace Mode Level"
-                    else col if col.name=="Trade Circle"
-                    else col.str.lower()
-                )
-            ).reset_index(drop=True)
-            rec_df.index += 1
+                # assemble and show
+                rec_df = pd.DataFrame(rec_records).sort_values(
+                    ["Peace Mode Level","Trade Circle","Ruler Name"],
+                    key=lambda col: (
+                        col.map(level_order) if col.name=="Peace Mode Level"
+                        else col if col.name=="Trade Circle"
+                        else col.str.lower()
+                    )
+                ).reset_index(drop=True)
+                rec_df.index += 1
         
-            st.markdown("##### Assign Recommended Resources")
-            st.dataframe(rec_df[[
-                "Peace Mode Level","Trade Circle","Ruler Name",
-                "Current Resource 1+2","Alliance","Team","Days Old",
-                "Nation Drill Link","Activity",
-                "Assigned Resource 1+2","Assigned Valid Resource Combination"
-            ]])
+                st.markdown("##### Assign Recommended Resources")
+                st.dataframe(rec_df[[
+                    "Peace Mode Level","Trade Circle","Ruler Name",
+                    "Current Resource 1+2","Alliance","Team","Days Old",
+                    "Nation Drill Link","Activity",
+                    "Assigned Resource 1+2","Assigned Valid Resource Combination"
+                ]])
+        else:
+            st.markdown("_Assign Recommended Resources will appear once you’ve populated Trade Circles above._")
+
 
 
 if __name__ == "__main__":
