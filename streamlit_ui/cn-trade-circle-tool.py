@@ -217,10 +217,13 @@ def main():
             details["Activity"] = details["Ruler Name"].map(avg_map)
 
             # Include Alliance Status at the end
-            details = details[
-                ["Ruler Name", "Resource 1+2", "Alliance", "Team",
-                 "Days Old", "Nation Drill Link", "Activity", "Alliance Status"]
-            ].reset_index(drop=True)
+            details = details[[
+                "Ruler Name", "Resource 1+2", "Alliance", "Team",
+                "Days Old", "Nation Drill Link", "Activity", "Alliance Status"
+            ]].sort_values(
+                by="Ruler Name",
+                key=lambda col: col.str.lower()
+            ).reset_index(drop=True)
             details.index += 1
             st.dataframe(details)
 
