@@ -689,6 +689,8 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     )
                 ).reset_index(drop=True)
                 rec_df.index += 1
+                # round Activity to 1 decimal place
+                rec_df["Activity"] = rec_df["Activity"].round(1)
 
                 # define which columns to show
                 columns = [
@@ -698,7 +700,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     "Assigned Resource 1+2", "Assigned Valid Resource Combination"
                 ]
 
-                # allow wrapping in the long combo column
                 styled_rec = rec_df[columns].style.set_properties(
                     subset=["Assigned Valid Resource Combination"],
                     **{
@@ -847,8 +848,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     )
                 ).reset_index(drop=True)
                 war_df.index += 1
+                # round Activity to 1 decimal place
+                war_df["Activity"] = war_df["Activity"].round(1)
 
-                # define exactly which columns to show
                 columns = [
                     "Peace Mode Level", "Trade Circle", "Ruler Name",
                     "Current Resource 1+2", "Alliance", "Team", "Days Old",
@@ -856,7 +858,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     "Assigned Resource 1+2", "Assigned Valid Resource Combination"
                 ]
 
-                # allow wrapping on the long combo column
                 styled_war = war_df[columns].style.set_properties(
                     subset=["Assigned Valid Resource Combination"],
                     **{
