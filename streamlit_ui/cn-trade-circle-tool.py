@@ -111,7 +111,7 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
 ##############################
 
 def main():
-    st.title("Cyber Nations | Trade Circle Tool")
+    st.title("Cyber Nations | Trade Circle Optimization Tool")
 
     # Always load fresh data
     df = load_data()
