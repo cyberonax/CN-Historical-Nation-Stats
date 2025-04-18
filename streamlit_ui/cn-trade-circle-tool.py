@@ -923,19 +923,21 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 )
 
         # ——— Download everything as a single XLSX ———
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-            rec_df.to_excel(writer, sheet_name="Peacetime", index=False)
-            war_df.to_excel(writer, sheet_name="Wartime",    index=False)
-        buffer.seek(0)
-    
-        st.download_button(
-            "Download All Data as Excel",
-            data=buffer,
-            file_name="trade_circles.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Includes Peacetime & Wartime sheets"
-        )
+        if 'rec_df' in locals() and 'war_df' in locals():
+            buffer = io.BytesIO()
+            # let pandas pick openpyxl by default
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                rec_df.to_excel(writer, sheet_name="Peacetime", index=False)
+                war_df.to_excel(writer, sheet_name="Wartime",    index=False)
+            buffer.seek(0)
+
+            st.download_button(
+                "Download All Data as Excel",
+                data=buffer,
+                file_name="trade_circles.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Includes Peacetime & Wartime sheets"
+            )
 
 if __name__ == "__main__":
     main()
