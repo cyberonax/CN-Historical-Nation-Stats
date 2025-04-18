@@ -457,15 +457,19 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                   .fillna(0)
                   .astype(int)
             )
+            
+            st.write(">> DAYS OLD DTYPE:", df_peace["Days Old"].dtype)
+            st.dataframe(
+                df_peace[["Ruler Name","Days Old"]]
+                .sort_values("Days Old", ascending=False)
+                .head(10)
+            )
 
             # 3. Define Peace Mode levels
-            def peace_level(days):
-                if days < 1000:
-                    return "A"
-                elif days < 2000:
-                    return "B"
-                else:
-                    return "C"
+            bins   = [-1,  999, 1999, float("inf")]
+            labels = ["A", "B", "C"]
+            df_peace["Peace Level"] = pd.cut(df_peace["Days Old"], bins=bins, labels=labels)
+
 
             df_peace["Peace Level"] = df_peace["Days Old"].apply(peace_level)
 
