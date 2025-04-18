@@ -440,37 +440,32 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
         with st.expander("Peace Mode Trade Circles"):
 
             def peace_level(days):
-                if days < 1000:   return 'Level A'
-                if days < 2000:   return 'Level B'
+                if days < 1000: return 'Level A'
+                if days < 2000: return 'Level B'
                 return 'Level C'
 
-            # 1) Recompute Days Old on tc_df to be safe, and tag Peace Mode levels
+            # 1) Tag each tc_df member with their Peace Mode level
             pm_base = tc_df.copy()
-            pm_base['Created']  = pd.to_datetime(pm_base['Created'], errors='coerce')
-            pm_base['Days Old'] = (pd.Timestamp.now() - pm_base['Created']).dt.days
             pm_base['Peace Mode Level'] = pm_base['Days Old'].apply(peace_level)
 
-            # 2) Ensure details also has Days Old, then build unmatched pool
-            details['Created']  = pd.to_datetime(details['Created'], errors='coerce')
-            details['Days Old'] = (pd.Timestamp.now() - details['Created']).dt.days
+            # 2) Build the unmatched pool from your details table
             pm_unmatched = details.loc[
                 ~details['Ruler Name'].isin(pm_base['Ruler Name'])
             ].copy()
             pm_unmatched['Peace Mode Level'] = pm_unmatched['Days Old'].apply(peace_level)
 
-            levels = ['Level A', 'Level B', 'Level C']
+            levels     = ['Level A','Level B','Level C']
             final_recs = []
             leftovers  = []
 
             for lvl in levels:
-                # collect this level's existing circles
-                df_lvl = pm_base[pm_base['Peace Mode Level'] == lvl]
+                # gather this level’s existing circles and unmatched
+                df_lvl  = pm_base[pm_base['Peace Mode Level']==lvl]
                 circles = {
-                    cid: df_lvl[df_lvl['Trade Circle'] == cid].to_dict('records')
+                    cid: df_lvl[df_lvl['Trade Circle']==cid].to_dict('records')
                     for cid in sorted(df_lvl['Trade Circle'].unique())
                 }
-                # this level's unmatched list
-                unmatched = pm_unmatched[pm_unmatched['Peace Mode Level'] == lvl].to_dict('records')
+                unmatched = pm_unmatched[pm_unmatched['Peace Mode Level']==lvl].to_dict('records')
                 broken    = set()
 
                 def incompletes():
@@ -480,56 +475,54 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         if cid not in broken and len(mems) < 6
                     ]
 
-                # A) Fill your own incomplete circles from your unmatched first
+                # A) Fill your own incomplete circles from your own unmatched
                 for cid, need in sorted(incompletes(), key=lambda x: x[1]):
                     take = min(need, len(unmatched))
                     circles[cid].extend(unmatched[:take])
                     unmatched = unmatched[take:]
 
-                # B) If still incomplete & no unmatched left, break your own weakest
+                # B) If still incomplete & no unmatched, break your own weakest circles
                 inc = incompletes()
                 if inc and not unmatched:
-                    # break the circles with *most* empty slots first
                     for cid, need in sorted(inc, key=lambda x: -x[1]):
                         broken.add(cid)
                         unmatched.extend(circles.pop(cid))
-                    # refill after breaking
+                    # refill those now‑broken circles
                     for cid, need in sorted(incompletes(), key=lambda x: x[1]):
                         take = min(need, len(unmatched))
                         circles[cid].extend(unmatched[:take])
                         unmatched = unmatched[take:]
 
-                # C) If still incomplete & no unmatched, borrow from lower levels
+                # C) Last resort: borrow from lower levels (also breaking their weakest first)
                 inc = incompletes()
                 if inc and not unmatched:
                     needed = sum(need for _, need in inc)
                     for lower in levels[:levels.index(lvl)]:
-                        df_low = pm_base[pm_base['Peace Mode Level'] == lower]
+                        df_low = pm_base[pm_base['Peace Mode Level']==lower]
                         low_circles = {
-                            cid: df_low[df_low['Trade Circle'] == cid].to_dict('records')
+                            cid: df_low[df_low['Trade Circle']==cid].to_dict('records')
                             for cid in df_low['Trade Circle'].unique()
                         }
-                        # find lower-level incompletes
                         low_inc = [
                             (cid, 6 - len(mems))
                             for cid, mems in low_circles.items()
                             if cid not in broken and len(mems) < 6
                         ]
                         for cid, need in sorted(low_inc, key=lambda x: -x[1]):
-                            broken.add(cid)  # mark it broken so we don’t reuse later
+                            broken.add(cid)
                             unmatched.extend(low_circles[cid])
                             needed -= need
                             if unmatched or needed <= 0:
                                 break
                         if unmatched or needed <= 0:
                             break
-                    # refill once more
+                    # refill after borrowing
                     for cid, need in sorted(incompletes(), key=lambda x: x[1]):
                         take = min(need, len(unmatched))
                         circles[cid].extend(unmatched[:take])
                         unmatched = unmatched[take:]
 
-                # D) Finally, pack any leftover unmatched into brand-new, full circles
+                # D) Pack any remaining unmatched into new full circles
                 max_id = max(circles.keys()) if circles else 0
                 next_id = max_id + 1
                 while len(unmatched) >= 6:
@@ -538,10 +531,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     unmatched = unmatched[6:]
                     next_id += 1
 
-                # E) Anything still in unmatched here is truly leftover
+                # E) Whatever’s still in unmatched is leftover
                 leftovers.extend(unmatched)
 
-                # F) Emit all non-broken circles for this level into final_recs
+                # F) Emit final, non‑broken circles
                 for cid in sorted(circles.keys()):
                     if cid in broken:
                         continue
@@ -550,9 +543,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         rec['Trade Circle']      = cid
                         final_recs.append(rec)
 
-            # Build and show the final DataFrame
+            # 3) Display results
             df_final = pd.DataFrame(final_recs)
-            order_map = {'Level A':0, 'Level B':1, 'Level C':2}
+            order_map = {'Level A':0,'Level B':1,'Level C':2}
             df_final = df_final.sort_values(
                 ['Peace Mode Level','Trade Circle','Ruler Name'],
                 key=lambda c: c.map(order_map) if c.name=='Peace Mode Level' else c
@@ -566,7 +559,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 "Days Old","Nation Drill Link","Activity"
             ]])
 
-            # Show leftovers
             df_left = pd.DataFrame(
                 leftovers,
                 columns=[
@@ -581,6 +573,3 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 st.markdown("_No unmatched players remain!_")
             else:
                 st.dataframe(df_left)
-
-if __name__ == "__main__":
-    main()
