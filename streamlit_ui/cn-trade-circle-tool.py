@@ -652,14 +652,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         "Days Old", "Nation Drill Link", "Activity"
                     ]])
 
-
-                    st.markdown("##### Optimal Trade Circles")
-                    st.dataframe(opt_df[[
-                        "Peace Mode Level", "Trade Circle", "Ruler Name",
-                        "Resource 1+2", "Alliance", "Team",
-                        "Days Old", "Nation Drill Link", "Activity"
-                    ]])
-
                     # show any leftovers (if required_circles was underestimated)
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
