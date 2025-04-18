@@ -438,91 +438,94 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
         # ——— Peace Mode Trade Circles ———
         with st.expander("Peace Mode Trade Circles"):
-            # helper to assign Peace Mode Level
-            def peace_level(days):
-                if days < 1000:
-                    return 'Level A'
-                elif days < 2000:
-                    return 'Level B'
-                else:
-                    return 'Level C'
-
-            # base circles and unmatched, with levels
-            pm_base = tc_df.copy()
-            pm_base['Peace Mode Level'] = pm_base['Days Old'].apply(peace_level)
-
-            pm_unmatched = details[~details['Ruler Name'].isin(pm_base['Ruler Name'])].copy()
-            pm_unmatched['Peace Mode Level'] = pm_unmatched['Days Old'].apply(peace_level)
-
-            final_records = []
-            leftover_records = []
-
-            # process each Peace Mode Level in order A → B → C
-            for level in ['Level A', 'Level B', 'Level C']:
-                lvl_base = pm_base[pm_base['Peace Mode Level'] == level].copy()
-                lvl_un   = pm_unmatched[pm_unmatched['Peace Mode Level'] == level].copy()
-
-                # count existing members in each circle
-                sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
-                incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
-                inc_sorted = sorted(incomplete.items(), key=lambda x: x[1])  # fewest empty slots first
-
-                # fill incomplete circles first
-                for circle_id, slots in inc_sorted:
-                    to_add = min(slots, len(lvl_un))
-                    adds = lvl_un.iloc[:to_add]
-                    lvl_un = lvl_un.iloc[to_add:]
-                    for _, row in adds.iterrows():
-                        rec = row.to_dict()
-                        rec['Trade Circle'] = circle_id
-                        final_records.append(rec)
-
-                # keep all original members in that level
-                for _, row in lvl_base.iterrows():
-                    final_records.append(row.to_dict())
-
-                # form new full circles from remaining unmatched
-                max_circle = int(lvl_base['Trade Circle'].max()) if not lvl_base.empty else 0
-                next_circle = max_circle + 1
-                while len(lvl_un) >= 6:
-                    group = lvl_un.iloc[:6]
-                    lvl_un = lvl_un.iloc[6:]
-                    for _, row in group.iterrows():
-                        rec = row.to_dict()
-                        rec['Trade Circle'] = next_circle
-                        final_records.append(rec)
-                    next_circle += 1
-
-                # anything left here becomes leftovers
-                leftover_records += [r.to_dict() for _, r in lvl_un.iterrows()]
-
-            # build final DataFrame
-            final_df = pd.DataFrame(final_records)
-            # sort by level, then circle, then ruler
-            level_order = {'Level A':0,'Level B':1,'Level C':2}
-            final_df = final_df.sort_values(
-                ['Peace Mode Level','Trade Circle','Ruler Name'],
-                key=lambda col: col.map(level_order) if col.name=='Peace Mode Level' else col
-            ).reset_index(drop=True)
-            final_df.index += 1
-
-            st.markdown("#### Final Peace Mode Trade Circles")
-            st.dataframe(final_df[[
-                "Peace Mode Level","Trade Circle","Ruler Name",
-                "Resource 1+2","Alliance","Team",
-                "Days Old","Nation Drill Link","Activity"
-            ]])
-
-            # build leftovers DataFrame with explicit columns to avoid KeyErrors
-            leftover_cols = ["Ruler Name","Resource 1+2","Alliance","Team","Days Old","Nation Drill Link","Activity"]
-            leftovers_df = pd.DataFrame(leftover_records, columns=leftover_cols)
-
-            st.markdown("#### Players Left Over")
-            if leftovers_df.empty:
-                st.markdown("_No unmatched players remain._")
+            # if there's no processed Trade Circle data, skip
+            if 'tc_df' not in locals() or tc_df.empty:
+                st.markdown("_No Trade Circles to process. Please add entries in the Input Trade Circles section above._")
             else:
-                leftovers_df.index = range(1, len(leftovers_df)+1)
-                st.dataframe(leftovers_df[leftover_cols])
+                # helper to assign Peace Mode Level
+                def peace_level(days):
+                    if days < 1000:
+                        return 'Level A'
+                    elif days < 2000:
+                        return 'Level B'
+                    else:
+                        return 'Level C'
+
+                # base circles and unmatched, with levels
+                pm_base = tc_df.copy()
+                pm_base['Peace Mode Level'] = pm_base['Days Old'].apply(peace_level)
+
+                pm_unmatched = details[~details['Ruler Name'].isin(pm_base['Ruler Name'])].copy()
+                pm_unmatched['Peace Mode Level'] = pm_unmatched['Days Old'].apply(peace_level)
+
+                final_records = []
+                leftover_records = []
+
+                # process each Peace Mode Level in order A → B → C
+                for level in ['Level A', 'Level B', 'Level C']:
+                    lvl_base = pm_base[pm_base['Peace Mode Level'] == level].copy()
+                    lvl_un   = pm_unmatched[pm_unmatched['Peace Mode Level'] == level].copy()
+
+                    # count existing members in each circle
+                    sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
+                    incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
+                    inc_sorted = sorted(incomplete.items(), key=lambda x: x[1])  # fewest empty slots first
+
+                    # fill incomplete circles first
+                    for circle_id, slots in inc_sorted:
+                        to_add = min(slots, len(lvl_un))
+                        adds = lvl_un.iloc[:to_add]
+                        lvl_un = lvl_un.iloc[to_add:]
+                        for _, row in adds.iterrows():
+                            rec = row.to_dict()
+                            rec['Trade Circle'] = circle_id
+                            final_records.append(rec)
+
+                    # keep all original members in that level
+                    for _, row in lvl_base.iterrows():
+                        final_records.append(row.to_dict())
+
+                    # form new full circles from remaining unmatched
+                    max_circle = int(lvl_base['Trade Circle'].max()) if not lvl_base.empty else 0
+                    next_circle = max_circle + 1
+                    while len(lvl_un) >= 6:
+                        group = lvl_un.iloc[:6]
+                        lvl_un = lvl_un.iloc[6:]
+                        for _, row in group.iterrows():
+                            rec = row.to_dict()
+                            rec['Trade Circle'] = next_circle
+                            final_records.append(rec)
+                        next_circle += 1
+
+                    # anything left here becomes leftovers
+                    leftover_records += [r.to_dict() for _, r in lvl_un.iterrows()]
+
+                # build final DataFrame
+                final_df = pd.DataFrame(final_records)
+                level_order = {'Level A':0, 'Level B':1, 'Level C':2}
+                final_df = final_df.sort_values(
+                    ['Peace Mode Level','Trade Circle','Ruler Name'],
+                    key=lambda col: col.map(level_order) if col.name=='Peace Mode Level' else col
+                ).reset_index(drop=True)
+                final_df.index += 1
+
+                st.markdown("#### Final Peace Mode Trade Circles")
+                st.dataframe(final_df[[
+                    "Peace Mode Level","Trade Circle","Ruler Name",
+                    "Resource 1+2","Alliance","Team",
+                    "Days Old","Nation Drill Link","Activity"
+                ]])
+
+                # build leftovers DataFrame with explicit columns to avoid KeyErrors
+                leftover_cols = ["Ruler Name","Resource 1+2","Alliance","Team","Days Old","Nation Drill Link","Activity"]
+                leftovers_df = pd.DataFrame(leftover_records, columns=leftover_cols)
+
+                st.markdown("#### Players Left Over")
+                if leftovers_df.empty:
+                    st.markdown("_No unmatched players remain._")
+                else:
+                    leftovers_df.index = range(1, len(leftovers_df)+1)
+                    st.dataframe(leftovers_df[leftover_cols])
 
 if __name__ == "__main__":
     main()
