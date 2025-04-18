@@ -604,7 +604,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             "Days Old","Nation Drill Link","Activity"
                         ]])
 
-        # ——— Assign PeacetimeRecommended Resources ———
+        # ——— Assign Peacetime Recommended Resources ———
         with st.expander("Assign Peacetime Recommended Resources"):
             # only run if we have optimized circles
             if 'opt_df' not in locals() or opt_df.empty:
@@ -733,9 +733,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     "Nation Drill Link","Activity",
                     "Assigned Resource 1+2","Assigned Valid Resource Combination"
                 ]])
+
         # ——— Assign Wartime Recommended Resources ———
         with st.expander("Assign Wartime Recommended Resources"):
-            # guard if no circles have been computed yet
+            # only proceed if we have Peace‐Mode circles to build on
             if 'opt_df' not in locals() or opt_df.empty:
                 st.markdown("_No Trade Circles to process. Please add entries in the Input Trade Circles section above._")
             else:
@@ -755,104 +756,109 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             best       = combo
                     return best
         
-                # parse War Mode valid combinations
+                # parse War Mode valid 12‑resource combos
                 war_combos = [
                     [r.strip() for r in line.split(",")]
-                    for line in war_text.splitlines() if line.strip()
+                    for line in war_text.splitlines()
+                    if line.strip()
                 ]
         
-                rec_records = []
-                # iterate each optimized circle
+                war_records = []
+                # loop over each Trade Circle from Peace Mode’s final grouping
                 for circle in sorted(opt_df["Trade Circle"].unique()):
                     group = opt_df[opt_df["Trade Circle"] == circle].reset_index(drop=True)
         
-                    # gather all current resources in this circle
+                    # 1) gather all current resources in this circle
                     all_res = []
                     for s in group["Resource 1+2"]:
                         all_res += [r.strip() for r in s.split(",") if r.strip()]
                     current_sorted = sorted(set(all_res))
         
-                    # pick the best 12‑resource War combo
+                    # 2) pick best matching 12‑combo for War
                     best_combo = find_best_match(current_sorted, war_combos)
                     combo_str  = ", ".join(best_combo)
         
-                    # lock‑in any exact current pairs (up to availability)
-                    avail = Counter(best_combo)
-                    fixed = {}
+                    # 3) lock in any exact current pairs (using Counter to prevent over‑use)
+                    avail       = Counter(best_combo)
+                    fixed       = {}
                     rem_players = []
                     for _, row in group.iterrows():
-                        ruler = row["Ruler Name"]
-                        curr   = tuple(r.strip() for r in row["Resource 1+2"].split(","))
-                        if avail[curr[0]] > 0 and avail[curr[1]] > 0:
+                        ruler    = row["Ruler Name"]
+                        curr_pair = tuple(r.strip() for r in row["Resource 1+2"].split(","))
+                        if avail[curr_pair[0]] > 0 and avail[curr_pair[1]] > 0:
                             fixed[ruler] = row["Resource 1+2"]
-                            avail[curr[0]] -= 1
-                            avail[curr[1]] -= 1
+                            avail[curr_pair[0]] -= 1
+                            avail[curr_pair[1]] -= 1
                         else:
                             rem_players.append(ruler)
         
-                    # build the remaining slices
+                    # 4) build slices for the remaining players
                     rem_resources = list(avail.elements())
                     m = len(rem_players)
                     slices = [ rem_resources[2*i:2*i+2] for i in range(m) ]
         
-                    # cost matrix for Hungarian
+                    # 5) cost matrix & Hungarian
                     cost = np.zeros((m, m), dtype=int)
                     for i, ruler in enumerate(rem_players):
-                        curr = sorted(r for r in group.loc[group["Ruler Name"]==ruler, "Resource 1+2"].iloc[0].split(","))
+                        curr = sorted(
+                            r for r in group.loc[group["Ruler Name"]==ruler, "Resource 1+2"].iloc[0].split(",")
+                            if r.strip()
+                        )
                         for j, sl in enumerate(slices):
-                            common = set(curr).intersection(set(sl))
+                            common = set(curr).intersection(sl)
                             cost[i, j] = 2 - len(common)
                     rows, cols = linear_sum_assignment(cost)
         
-                    # record fixed assignments
+                    # 6a) record locked‑in players
                     for ruler, pair in fixed.items():
                         row = group[group["Ruler Name"] == ruler].iloc[0]
-                        rec_records.append({
-                            "Trade Circle": circle,
-                            "Ruler Name": ruler,
-                            "Current Resource 1+2": row["Resource 1+2"],
-                            "Alliance": row["Alliance"],
-                            "Team": row["Team"],
-                            "Days Old": row["Days Old"],
-                            "Nation Drill Link": row["Nation Drill Link"],
-                            "Activity": row["Activity"],
-                            "Assigned Resource 1+2": pair,
+                        war_records.append({
+                            "Trade Circle":                      circle,
+                            "Ruler Name":                        ruler,
+                            "Current Resource 1+2":              row["Resource 1+2"],
+                            "Alliance":                          row["Alliance"],
+                            "Team":                              row["Team"],
+                            "Days Old":                          row["Days Old"],
+                            "Nation Drill Link":                 row["Nation Drill Link"],
+                            "Activity":                          row["Activity"],
+                            "Assigned Resource 1+2":             pair,
                             "Assigned Valid Resource Combination": combo_str
                         })
         
-                    # record Hungarian assignments
+                    # 6b) record Hungarian assignments
                     for i, j in zip(rows, cols):
-                        ruler = rem_players[i]
-                        sl    = slices[j]
-                        row   = group[group["Ruler Name"] == ruler].iloc[0]
-                        rec_records.append({
-                            "Trade Circle": circle,
-                            "Ruler Name": ruler,
-                            "Current Resource 1+2": row["Resource 1+2"],
-                            "Alliance": row["Alliance"],
-                            "Team": row["Team"],
-                            "Days Old": row["Days Old"],
-                            "Nation Drill Link": row["Nation Drill Link"],
-                            "Activity": row["Activity"],
-                            "Assigned Resource 1+2": f"{sl[0]}, {sl[1]}",
+                        ruler   = rem_players[i]
+                        sl      = slices[j]
+                        assigned = f"{sl[0]}, {sl[1]}"
+                        row     = group[group["Ruler Name"] == ruler].iloc[0]
+                        war_records.append({
+                            "Trade Circle":                      circle,
+                            "Ruler Name":                        ruler,
+                            "Current Resource 1+2":              row["Resource 1+2"],
+                            "Alliance":                          row["Alliance"],
+                            "Team":                              row["Team"],
+                            "Days Old":                          row["Days Old"],
+                            "Nation Drill Link":                 row["Nation Drill Link"],
+                            "Activity":                          row["Activity"],
+                            "Assigned Resource 1+2":             assigned,
                             "Assigned Valid Resource Combination": combo_str
                         })
         
-                # build and display the War Mode recommendation table
-                war_rec_df = pd.DataFrame(rec_records)
-                war_rec_df = war_rec_df.sort_values(
+                # build and display the War Mode DataFrame
+                war_df = pd.DataFrame(war_records).sort_values(
                     ["Trade Circle","Ruler Name"],
-                    key=lambda col: col if col.name=="Trade Circle" else col.str.lower()
+                    key=lambda col: (
+                        col if col.name=="Trade Circle" else col.str.lower()
+                    )
                 ).reset_index(drop=True)
-                war_rec_df.index += 1
+                war_df.index += 1
         
                 st.markdown("##### Assign Wartime Recommended Resources")
-                st.dataframe(war_rec_df[[
-                    "Trade Circle","Ruler Name","Current Resource 1+2",
-                    "Alliance","Team","Days Old","Nation Drill Link","Activity",
-                    "Assigned Resource 1+2","Assigned Valid Resource Combination"
+                st.dataframe(war_df[[
+                    "Trade Circle", "Ruler Name", "Current Resource 1+2",
+                    "Alliance", "Team", "Days Old", "Nation Drill Link", "Activity",
+                    "Assigned Resource 1+2", "Assigned Valid Resource Combination"
                 ]])
-
 
 if __name__ == "__main__":
     main()
