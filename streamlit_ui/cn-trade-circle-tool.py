@@ -925,16 +925,20 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
         # ——— Download everything as a single XLSX ———
         if 'rec_df' in locals() and 'war_df' in locals():
             buffer = io.BytesIO()
-            # let pandas pick openpyxl by default
             with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                 rec_df.to_excel(writer, sheet_name="Peacetime", index=False)
                 war_df.to_excel(writer, sheet_name="Wartime",    index=False)
             buffer.seek(0)
 
+            # build filename: AllianceName_trade_circles_YYYY-MM-DD.xlsx
+            alliance_safe = selected_alliance.replace(" ", "_")
+            date_str      = latest_date.strftime("%Y-%m-%d")
+            download_name = f"{alliance_safe}_Optimized_Trade_Circles_{date_str}.xlsx"
+
             st.download_button(
                 "Download All Data as Excel",
                 data=buffer,
-                file_name="trade_circles.xlsx",
+                file_name=download_name,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 help="Includes Peacetime & Wartime sheets"
             )
