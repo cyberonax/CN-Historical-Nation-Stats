@@ -320,11 +320,11 @@ def main():
         # ——— Input Trade Circless ———
         with st.expander("Input Trade Circles"):
             # — Inputs —
-            trade_input = st.text_area("Trade Circles (one Ruler Name per line)", height=200)
+            trade_input  = st.text_area("Trade Circles (one Ruler Name per line)", height=200)
             filter_input = st.text_area("Filter Out Players (one per line)", height=100)
         
-            # — Parse into blocks of names —
-            blocks = trade_input.split("\n\n")
+            # — Parse into blocks of names, drop blank/x lines (already case‑insensitive for "x") —
+            blocks  = trade_input.split("\n\n")
             circles = []
             for blk in blocks:
                 names = [
@@ -335,27 +335,40 @@ def main():
                 if names:
                     circles.append(names)
         
-            # — Build record list & DataFrame with explicit columns —
-            records = [
-                {"Trade Circle": i+1, "Ruler Name": name}
-                for i, circle in enumerate(circles)
-                for name in circle
-            ]
-            tc_df = pd.DataFrame(records, columns=["Trade Circle", "Ruler Name"])
+            # — Build record list & DataFrame, include a lowercase key —
+            records = []
+            for i, circle in enumerate(circles):
+                for name in circle:
+                    records.append({
+                        "Trade Circle": i+1,
+                        "Ruler Name": name,
+                        "merge_key": name.lower()
+                    })
+            tc_df = pd.DataFrame(records, columns=["Trade Circle", "Ruler Name", "merge_key"])
         
-            # If nothing came in, warn and stop here
             if tc_df.empty:
                 st.warning("No valid Trade Circle entries detected.")
             else:
-                # — Merge in the latest snapshot stats —
-                right = (
-                    latest_snapshot
-                    .assign(**{"Resource 1+2": latest_snapshot.apply(get_resource_1_2, axis=1)})
-                    [["Ruler Name", "Resource 1+2", "Alliance", "Team", "Created", "Nation ID"]]
-                )
-                tc_df = tc_df.merge(right, on="Ruler Name", how="inner")
+                # — Prepare snapshot with the same lowercase key and combined resources —
+                snap = latest_snapshot.copy()
+                snap["merge_key"]     = snap["Ruler Name"].str.lower()
+                snap["Resource 1+2"]  = snap.apply(get_resource_1_2, axis=1)
         
-                # — Compute Days Old, Drill Link, Activity —
+                # — Merge on the lowercase key —
+                tc_df = tc_df.merge(
+                    snap[[
+                        "merge_key",
+                        "Resource 1+2",
+                        "Alliance",
+                        "Team",
+                        "Created",
+                        "Nation ID"
+                    ]],
+                    on="merge_key",
+                    how="inner"
+                )
+        
+                # — Compute Days Old, Drill Link, map Activity exactly as before —
                 tc_df["Created"] = pd.to_datetime(tc_df["Created"], errors="coerce")
                 tc_df["Days Old"] = (pd.Timestamp.now() - tc_df["Created"]).dt.days
                 tc_df["Nation Drill Link"] = (
@@ -363,24 +376,36 @@ def main():
                     + tc_df["Nation ID"].astype(str)
                 )
                 tc_df["Activity"] = tc_df["Ruler Name"].map(
-                    avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"]
+                    avg_activity
+                      .set_index("Ruler Name")["All Time Average Days of Inactivity"]
                 )
         
-                # — Apply your filters —
-                filter_set = {ln.strip() for ln in filter_input.splitlines() if ln.strip()}
-                tc_df = tc_df[
-                    (tc_df["Activity"] < 14) &
-                    (tc_df["Alliance"] == selected_alliance) &
-                    (tc_df["Team"] == majority_team) &
-                    (~tc_df["Ruler Name"].isin(filter_set))
-                ].reset_index(drop=True)
+                # — Case‑insensitive filter‑out set —
+                filter_set = {ln.strip().lower() for ln in filter_input.splitlines() if ln.strip()}
         
-                # — Show the table —
+                # — Apply filters on lowercase key, then drop merge_key —
+                tc_df = (
+                    tc_df[
+                        (tc_df["Activity"] < 14) &
+                        (tc_df["Alliance"] == selected_alliance) &
+                        (tc_df["Team"] == majority_team) &
+                        (~tc_df["merge_key"].isin(filter_set))
+                    ]
+                    .drop(columns="merge_key")
+                    .reset_index(drop=True)
+                )
+        
+                # — Display —
                 st.markdown("#### Processed Trade Circles")
                 st.dataframe(tc_df[[
-                    "Trade Circle", "Ruler Name", "Resource 1+2",
-                    "Alliance", "Team", "Days Old",
-                    "Nation Drill Link", "Activity"
+                    "Trade Circle",
+                    "Ruler Name",
+                    "Resource 1+2",
+                    "Alliance",
+                    "Team",
+                    "Days Old",
+                    "Nation Drill Link",
+                    "Activity"
                 ]])
 
 
