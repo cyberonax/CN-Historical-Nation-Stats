@@ -508,28 +508,31 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         members.append(unmatched[lvl].pop(0))
                     circles[lvl][cid] = members
 
-            # 8. Cross‑level rebalance: break weakest A→B then A/B→C
+            # 8. Cross‑level rebalance: only siphon off exactly the # needed
             def break_and_reassign(from_lvls, to_lvl):
-                donors = [
-                    (lvl, cid, mems)
-                    for lvl in from_lvls
-                    for cid, mems in circles[lvl].items()
-                ]
-                donors.sort(key=lambda x: (6 - len(x[2])), reverse=True)
-                targets = [(cid, mems)
-                          for cid, mems in circles[to_lvl].items()
-                          if len(mems) < 6]
-                for tid, tm in targets:
-                    while len(tm) < 6 and donors:
-                        lvl, cid, dm = donors.pop(0)
-                        for m in dm:
-                            if len(tm) < 6:
-                                tm.append(m)
-                            else:
-                                unmatched[lvl].append(m)
-                        del circles[lvl][cid]
-                    circles[to_lvl][tid] = tm
+                # gather donor circles
+                for lvl in from_lvls:
+                    # we’ll iterate over a copy of the keys because we may delete some
+                    for cid in list(circles[lvl].keys()):
+                        members = circles[lvl][cid]
+                        needed = 6 - len(circles[to_lvl].get(cid, []))
+                        if needed <= 0:
+                            continue
 
+                        # pick the first `needed` players
+                        to_move = members[:needed]
+                        # append them into the *same* circle‐id in the target level
+                        circles[to_lvl].setdefault(cid, []).extend(to_move)
+                        
+                        # remove them from the donor
+                        remaining = members[needed:]
+                        if remaining:
+                            circles[lvl][cid] = remaining
+                        else:
+                            # donor is now empty
+                            del circles[lvl][cid]
+
+            # then use
             break_and_reassign(["A"], "B")
             break_and_reassign(["A", "B"], "C")
 
