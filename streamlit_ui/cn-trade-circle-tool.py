@@ -726,8 +726,17 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 ).reset_index(drop=True)
                 rec_df.index += 1
         
+                styled_rec = rec_df.style.set_properties(
+                    subset=["Assigned Valid Resource Combination"],
+                    **{
+                        "white-space": "normal",     # allow wrapping
+                        "max-width": "600px",         # at most 600px wide
+                        "text-align": "left"          # optional, nicer alignment
+                    }
+                )
+                
                 st.markdown("##### Assign Peacetime Recommended Resources")
-                st.dataframe(rec_df[[
+                st.dataframe(styled_rec, use_container_width=True)
                     "Peace Mode Level","Trade Circle","Ruler Name",
                     "Current Resource 1+2","Alliance","Team","Days Old",
                     "Nation Drill Link","Activity",
@@ -858,7 +867,17 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 ).reset_index(drop=True)
                 war_df.index += 1
         
+                styled_war = war_df.style.set_properties(
+                    subset=["Assigned Valid Resource Combination"],
+                    **{
+                        "white-space": "normal",
+                        "max-width": "600px",
+                        "text-align": "left"
+                    }
+                )
+                
                 st.markdown("##### Assign Wartime Recommended Resources")
+                st.dataframe(styled_war, use_container_width=True)
                 st.dataframe(war_df[[
                     "Peace Mode Level","Trade Circle","Ruler Name",
                     "Current Resource 1+2","Alliance","Team","Days Old",
