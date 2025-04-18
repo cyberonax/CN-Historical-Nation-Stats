@@ -1008,7 +1008,7 @@ def main():
 
     # Download All Data to Excel button
     # ─────────────────────────────────────
-    if st.button("Prepare Data for Export"):
+    if st.button("Prepare All Data for Export"):
         # Prepare in-memory output
         output = io.BytesIO()
         
