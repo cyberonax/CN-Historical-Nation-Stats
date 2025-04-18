@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 import altair as alt
 import itertools
+import io
 
 st.set_page_config(layout="wide")
 
@@ -1004,6 +1005,43 @@ def main():
                 st.components.v1.html(copy_button_html, height=50)
                 alt_df["Activity"] = alt_df["Activity"].apply(lambda x: f"{x:.2f}" if isinstance(x, (float, int)) else x)
                 st.table(alt_df)
+
+# Download All Data to Excel button
+if st.button("Download All Data as Excel"):
+    # Prepare in-memory output
+    output = io.BytesIO()
+    
+    # Gather your dataframes
+    dfs = {
+        "Raw Data": st.session_state.df,
+        "Aggregated Alliance Metrics": agg_df,
+        "Individual Nation Metrics": df_indiv
+    }
+    # Include inactivity tracker if it was generated
+    if 'alt_df' in locals():
+        dfs["Inactivity Tracker"] = alt_df
+
+    # Write to Excel with auto column widths
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        for sheet_name, df in dfs.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+            worksheet = writer.sheets[sheet_name]
+            # Auto-fit columns
+            for idx, col in enumerate(df.columns):
+                # find max length in this column and header
+                series = df[col].astype(str)
+                max_len = max(series.map(len).max(), len(col)) + 2
+                worksheet.set_column(idx, idx, max_len)
+        writer.save()
+    
+    output.seek(0)
+    # Provide download button
+    st.download_button(
+        label="Download All Data to Excel",
+        data=output.getvalue(),
+        file_name="CyberNations_timeline_stats_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 if __name__ == "__main__":
     main()
