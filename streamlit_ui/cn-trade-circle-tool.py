@@ -739,7 +739,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     subset=["Assigned Valid Resource Combination"],
                     **{
                         "white-space": "normal",
-                        "max-width": "800px",
+                        "max-width": "1200px",
                         "text-align": "left"
                     }
                 )
@@ -882,7 +882,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     subset=["Assigned Valid Resource Combination"],
                     **{
                         "white-space": "normal",
-                        "max-width": "800px",
+                        "max-width": "1200px",
                         "text-align": "left"
                     }
                 )
