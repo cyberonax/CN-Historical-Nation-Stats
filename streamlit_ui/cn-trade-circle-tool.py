@@ -438,83 +438,101 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
         # ——— Peace Mode Trade Circles ———
         with st.expander("Peace Mode Trade Circles"):
-            # Prepare list of players with trade circle assignments
-            combined = pd.concat([
-                tc_df.assign(source='circle'),
-                unmatched.assign(Trade Circle=None).assign(source='unmatched')
-            ], ignore_index=True)
-            combined['Days Old'] = combined['Days Old'].astype(int)
-
-            # Assign peace levels
-            def get_level(days):
-                if days < 1000:
-                    return 'A'
-                elif days < 2000:
-                    return 'B'
-                else:
-                    return 'C'
-            combined['Peace Level'] = combined['Days Old'].apply(get_level)
-
-            # Target capacity
-            CAPACITY = 6
-
-            # Track final and unmatched
-            final = []
-            left_unmatched = []
-
-            # Process per level, high to low priority
-            for level in ['C', 'B', 'A']:
-                lvl_df = combined[combined['Peace Level'] == level]
-                # initialize circles
-                circle_ids = sorted(lvl_df['Trade Circle'].dropna().unique())
-                circles = {tc: list(lvl_df[lvl_df['Trade Circle'] == tc].to_dict('records')) for tc in circle_ids}
-                # unmatched in this level
-                lvl_unmatched = lvl_df[lvl_df['source'] == 'unmatched'].to_dict('records')
-
-                # fill existing circles by fewest empty slots first
-                for tc in sorted(circles, key=lambda x: (CAPACITY - len(circles[x]), x)):
-                    slots = CAPACITY - len(circles[tc])
-                    while slots > 0 and lvl_unmatched:
-                        circles[tc].append(lvl_unmatched.pop(0))
-                        slots -= 1
-
-                # collect leftover unmatched for final display
-                left_unmatched.extend(lvl_unmatched)
-
-                # gather final assignments
-                for tc, members in circles.items():
-                    for r in members:
-                        final.append({
-                            'Peace Level': level,
-                            'Trade Circle': int(tc),
-                            'Ruler Name': r['Ruler Name'],
-                            'Resource 1+2': r['Resource 1+2'],
-                            'Alliance': r['Alliance'],
-                            'Team': r['Team'],
-                            'Days Old': r['Days Old'],
-                            'Nation Drill Link': r['Nation Drill Link'],
-                            'Activity': r['Activity']
-                        })
-
-            final_df = pd.DataFrame(final)
-
-            # Display tables A, B, C
+            # Start from the processed Trade Circles (tc_df) and the unmatched players:
+            pm_df = tc_df.copy()
+            # Assign Peace Mode Level
+            pm_df['Level'] = pm_df['Days Old'].apply(
+                lambda d: 'A' if d < 1000 else ('B' if d < 2000 else 'C')
+            )
+            # Identify “pure” circles (all members same Level)
+            level_counts = pm_df.groupby('Trade Circle')['Level'].nunique()
+            pure_circles = level_counts[level_counts == 1].index.tolist()
+            broken_circles = level_counts[level_counts > 1].index.tolist()
+    
+            # Keep pure circles intact
+            kept = pm_df[pm_df['Trade Circle'].isin(pure_circles)].copy()
+    
+            # Build dict: { level: { circle_id: DataFrame_of_members } }
+            circles = {}
+            for cid, grp in kept.groupby('Trade Circle'):
+                lvl = grp['Level'].iloc[0]
+                circles.setdefault(lvl, {})[cid] = grp.copy()
+    
+            # Build pool of players to (re)assign: broken-circle members + unmatched
+            broken_players = (
+                pm_df[pm_df['Trade Circle'].isin(broken_circles)]
+                .drop(columns='Trade Circle')
+            )
+            pool = pd.concat([broken_players, unmatched], ignore_index=True)
+            # Assign levels in pool
+            pool['Level'] = pool['Days Old'].apply(
+                lambda d: 'A' if d < 1000 else ('B' if d < 2000 else 'C')
+            )
+    
+            # Helper: get next available circle ID
+            next_cid = max(pm_df['Trade Circle'].max(), 0) + 1
+    
+            # Fill existing circles first
             for lvl in ['A', 'B', 'C']:
-                table = final_df[final_df['Peace Level'] == lvl].sort_values(['Trade Circle', 'Ruler Name'])
-                st.markdown(f"**Peace Mode Level {lvl}**")
-                st.dataframe(table[[
-                    'Trade Circle', 'Ruler Name', 'Resource 1+2', 'Alliance', 'Team',
-                    'Days Old', 'Nation Drill Link', 'Activity'
-                ]])
-
-            # Show any unmatched
-            if left_unmatched:
-                um_df = pd.DataFrame(left_unmatched).sort_values('Ruler Name')
-                st.markdown("#### Unmatched Players")
-                st.dataframe(um_df[[
-                    'Ruler Name', 'Resource 1+2', 'Alliance', 'Team',
-                    'Days Old', 'Nation Drill Link', 'Activity'
-                ]])
+                # get pool for this level
+                pool_lvl = pool[pool['Level'] == lvl]
+                # sort circles by fewest empty slots
+                lvl_circles = circles.get(lvl, {})
+                for cid, grp in sorted(lvl_circles.items(),
+                                       key=lambda x: (6 - len(x[1]), x[0])):
+                    needed = 6 - len(grp)
+                    if needed <= 0:
+                        continue
+                    take = pool_lvl.iloc[:needed]
+                    if take.empty:
+                        continue
+                    take = take.copy()
+                    take['Trade Circle'] = cid
+                    circles[lvl][cid] = pd.concat([grp, take], ignore_index=True)
+                    # remove from pool
+                    pool = pool.drop(take.index)
+    
+            # Create new circles for remaining pool
+            for lvl in ['A','B','C']:
+                pool_lvl = pool[pool['Level'] == lvl]
+                while len(pool_lvl) >= 6:
+                    group = pool_lvl.iloc[:6].copy()
+                    group['Trade Circle'] = next_cid
+                    circles.setdefault(lvl, {})[next_cid] = group
+                    # drop and advance
+                    pool = pool.drop(group.index)
+                    next_cid += 1
+                    pool_lvl = pool[pool['Level'] == lvl]
+    
+            # Combine all circles into one DataFrame
+            all_circles = []
+            for lvl in ['A','B','C']:
+                for cid, grp in circles.get(lvl, {}).items():
+                    grp = grp.copy()
+                    grp['Trade Circle'] = cid
+                    all_circles.append(grp)
+            final_df = pd.concat(all_circles, ignore_index=True)
+    
+            # Sort partners within each circle
+            final_df = (
+                final_df
+                .sort_values(['Trade Circle', 'Ruler Name'], key=lambda col: col.str.lower() if col.name=='Ruler Name' else col)
+                .reset_index(drop=True)
+            )
+            final_df.index += 1
+    
+            # Display
+            st.markdown("#### Peace Mode Trade Circles (filled and balanced)")
+            st.dataframe(final_df[[
+                "Trade Circle",
+                "Ruler Name",
+                "Resource 1+2",
+                "Alliance",
+                "Team",
+                "Days Old",
+                "Nation Drill Link",
+                "Activity"
+            ]])
 
 if __name__ == "__main__":
     main()
