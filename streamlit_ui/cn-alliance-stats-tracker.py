@@ -1032,7 +1032,7 @@ def main():
                     series = df[col].astype(str)
                     max_len = max(series.map(len).max(), len(col)) + 2
                     worksheet.set_column(idx, idx, max_len)
-            writer.save()
+        # ← no writer.save() here
         
         output.seek(0)
         # Provide download button
