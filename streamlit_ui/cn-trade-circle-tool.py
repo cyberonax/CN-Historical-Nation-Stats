@@ -654,9 +654,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     # show any leftovers (if required_circles was underestimated)
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-                    st.markdown("##### Leftover Players")
+                    st.markdown("##### Players Left Over")
                     if leftovers.empty:
-                        st.markdown("_None_")
+                        st.markdown("_No unmatched players remain._")
                     else:
                         leftovers.index = range(1, len(leftovers) + 1)
                         st.dataframe(leftovers[[
