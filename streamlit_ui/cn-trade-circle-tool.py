@@ -393,7 +393,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     .drop(columns="merge_key")
                     .reset_index(drop=True)
                 )
-        
+                
+                # shift the index so it starts at 1 instead of 0
+                unmatched.index = unmatched.index + 1
+                
                 # — Processed Trade Circles —
                 st.markdown("#### Processed Trade Circles")
                 st.dataframe(tc_df[[
@@ -417,6 +420,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     .sort_values(by="Ruler Name", key=lambda col: col.str.lower())
                     .reset_index(drop=True)
                 )
+                
+                # shift the index so it starts at 1 instead of 0
+                unmatched.index = unmatched.index + 1
                 
                 st.dataframe(
                     unmatched[
