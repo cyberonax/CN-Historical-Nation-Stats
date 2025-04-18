@@ -623,11 +623,35 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                     # build and display the final optimized DataFrame
                     opt_df = pd.DataFrame(optimal_records)
+
+                    # ── 1) Renumber Trade Circles sequentially within each Peace Mode Level
+                    renumbered = []
+                    for level, grp in opt_df.groupby('Peace Mode Level', sort=False):
+                        # map old circle IDs to new 1…n
+                        old_ids = sorted(grp['Trade Circle'].unique())
+                        id_map  = {old: new for new, old in enumerate(old_ids, start=1)}
+                        # apply mapping and collect
+                        for _, row in grp.iterrows():
+                            row = row.copy()
+                            row['Trade Circle'] = id_map[row['Trade Circle']]
+                            renumbered.append(row)
+                    opt_df = pd.DataFrame(renumbered)
+
+                    # ── 2) Sort Ruler Names alphabetically within each circle
+                    level_order = {'Level A': 0, 'Level B': 1, 'Level C': 2}
                     opt_df = opt_df.sort_values(
                         ['Peace Mode Level', 'Trade Circle', 'Ruler Name'],
                         key=lambda col: col.map(level_order) if col.name == 'Peace Mode Level' else col
                     ).reset_index(drop=True)
                     opt_df.index += 1
+
+                    st.markdown("##### Optimal Trade Circles")
+                    st.dataframe(opt_df[[
+                        "Peace Mode Level", "Trade Circle", "Ruler Name",
+                        "Resource 1+2", "Alliance", "Team",
+                        "Days Old", "Nation Drill Link", "Activity"
+                    ]])
+
 
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[
