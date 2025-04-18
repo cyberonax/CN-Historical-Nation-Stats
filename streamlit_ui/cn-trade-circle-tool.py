@@ -394,7 +394,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     .reset_index(drop=True)
                 )
         
-                # — Display —
+                # — Processed Trade Circles —
                 st.markdown("#### Processed Trade Circles")
                 st.dataframe(tc_df[[
                     "Trade Circle",
@@ -407,7 +407,23 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     "Activity"
                 ]])
 
-
+                # — Unmatched Players —
+                st.markdown("#### Unmatched Players")
+                # pick off any valid nation-details rows whose Ruler Name did NOT appear in our trade circles
+                unmatched = details[~details["Ruler Name"].isin(tc_df["Ruler Name"])].copy()
+                st.dataframe(
+                    unmatched[
+                        [
+                            "Ruler Name",
+                            "Resource 1+2",
+                            "Alliance",
+                            "Team",
+                            "Days Old",
+                            "Nation Drill Link",
+                            "Activity",
+                        ]
+                    ]
+                )
 
 
 
