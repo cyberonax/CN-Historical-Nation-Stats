@@ -3,7 +3,7 @@ name: Keep Streamlit App Awake
 on:
   schedule:
     # Runs at minute 0,25,50 of each hour (every ~25 minutes)
-    - cron: '*/25 * * * *'
+    - cron: '*/50 * * * *'
 
 jobs:
   ping:
