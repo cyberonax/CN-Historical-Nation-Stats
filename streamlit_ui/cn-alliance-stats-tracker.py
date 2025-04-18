@@ -1028,11 +1028,10 @@ def main():
                 worksheet = writer.sheets[sheet_name]
                 # Auto-fit columns
                 for idx, col in enumerate(df.columns):
-                    # find max length in this column and header
                     series = df[col].astype(str)
                     max_len = max(series.map(len).max(), len(col)) + 2
                     worksheet.set_column(idx, idx, max_len)
-        # ← no writer.save() here
+        # ← removed writer.save()
         
         output.seek(0)
         # Provide download button
