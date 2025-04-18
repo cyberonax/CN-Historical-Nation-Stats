@@ -319,93 +319,49 @@ def main():
 
         # ——— Input Trade Circless ———
         with st.expander("Input Trade Circles"):
-            st.markdown("""
-    Enter the **Ruler Name** for each Trade Circle below (max 6 per circle).  
-    Separate Trade Circles with an empty line.  
-    Lines starting with `x` or blank lines are treated as empty slots and omitted.
-            """)
-            trade_input = st.text_area(
-                "Trade Circles (one Ruler Name per line)",
-                height=200
+            # Inputs
+            circles = [
+                [s.strip() for s in block.splitlines() if s.strip().lower() != "x"]
+                for block in trade_input.split("\n\n")
+            ]
+            filter_set = {s.strip() for s in filter_input.splitlines() if s.strip()}
+            
+            # Build a table of (circle#, ruler)
+            tc = pd.DataFrame(
+                [(i+1, name) for i, blk in enumerate(circles) for name in blk],
+                columns=["Trade Circle", "Ruler Name"]
             )
-    
-            st.markdown("Enter one **Ruler Name** per line to filter out players, or leave blank.")
-            filter_input = st.text_area(
-                "Filter Out Players",
-                height=100
+            
+            # Join in the latest snapshot, avg inactivity, compute extras, then filter
+            df_tc = (
+                tc
+                .merge(
+                    latest_snapshot.assign(
+                        **{"Resource 1+2": latest_snapshot.apply(get_resource_1_2, axis=1)},
+                    )[
+                        ["Ruler Name","Resource 1+2","Alliance","Team","Created","Nation ID"]
+                    ],
+                    on="Ruler Name", how="inner"
+                )
+                .assign(
+                    Days_Old=lambda d: (pd.Timestamp.now() - pd.to_datetime(d["Created"])).dt.days,
+                    **{"Nation Drill Link":
+                        lambda d: "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
+                                  + d["Nation ID"].astype(str)},
+                    Activity=lambda d: d["Ruler Name"]
+                                      .map(avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"])
+                )
+                .query(
+                    "Activity < 14 and Alliance == @selected_alliance and Team == @majority_team"
+                )
+                .loc[lambda d: ~d["Ruler Name"].isin(filter_set),
+                     ["Trade Circle","Ruler Name","Resource 1+2",
+                      "Alliance","Team","Days_Old","Nation Drill Link","Activity"]]
+                .reset_index(drop=True)
             )
-    
-            # ——— parse into lists of lists ———
-            raw_lines = trade_input.splitlines()
-            circles, current = [], []
-            for ln in raw_lines:
-                s = ln.strip()
-                if not s:
-                    if current:
-                        circles.append(current)
-                        current = []
-                    continue
-                if s.lower() == "x":
-                    continue
-                current.append(s)
-            if current:
-                circles.append(current)
-    
-            # flatten with circle numbers
-            records = []
-            for idx, circle in enumerate(circles, start=1):
-                for name in circle:
-                    records.append({"Trade Circle": idx, "Ruler Name": name})
-    
-            # build a DataFrame and pull in the latest snapshot details
-            tc_df = (
-                pd.DataFrame(records)
-                  .merge(
-                      latest_snapshot[[
-                          "Ruler Name", "Resource 1", "Resource 2",
-                          "Alliance", "Team", "Created", "Nation ID"
-                      ]],
-                      on="Ruler Name",
-                      how="inner"
-                  )
-            )
-    
-            # compute helper columns
-            tc_df["Resource 1+2"] = tc_df.apply(get_resource_1_2, axis=1)
-            tc_df["Created"]      = pd.to_datetime(tc_df["Created"], errors="coerce")
-            tc_df["Days Old"]     = (pd.Timestamp.now() - tc_df["Created"]).dt.days
-            tc_df["Nation Drill Link"] = (
-                "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
-                + tc_df["Nation ID"].astype(str)
-            )
-            # map in all‑time average inactivity
-            tc_df["Activity"] = tc_df["Ruler Name"].map(
-                avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"]
-            )
-    
-            # build filter‑out set
-            to_filter = {ln.strip() for ln in filter_input.splitlines() if ln.strip()}
-    
-            # final filtering
-            tc_df = tc_df[
-                (tc_df["Activity"] < 14) &
-                (tc_df["Alliance"] == selected_alliance) &
-                (tc_df["Team"] == majority_team) &
-                (~tc_df["Ruler Name"].isin(to_filter))
-            ].reset_index(drop=True)
-    
-            # show columns in the requested order
-            st.markdown("#### Processed Trade Circles")
-            st.dataframe(tc_df[[
-                "Trade Circle",
-                "Ruler Name",
-                "Resource 1+2",
-                "Alliance",
-                "Team",
-                "Days Old",
-                "Nation Drill Link",
-                "Activity"
-            ]])
+        
+            st.dataframe(df_tc)
+
 
 if __name__ == "__main__":
     main()
