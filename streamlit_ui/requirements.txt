@@ -4,3 +4,4 @@ altair
 numpy
 pulp
 scipy
+XlsxWriter
