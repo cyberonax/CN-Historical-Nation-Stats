@@ -7,6 +7,8 @@ from datetime import datetime
 import altair as alt
 import numpy as np
 from scipy.optimize import linear_sum_assignment
+import io
+import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide")
 
@@ -925,10 +927,8 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
         with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
             rec_df.to_excel(writer, sheet_name="Peacetime", index=False)
             war_df.to_excel(writer, sheet_name="Wartime",    index=False)
-            # (optionally) add more sheets: final_df, leftovers_df, etc.
-            writer.save()
         buffer.seek(0)
-        
+    
         st.download_button(
             "Download All Data as Excel",
             data=buffer,
