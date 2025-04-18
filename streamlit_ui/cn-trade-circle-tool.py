@@ -527,63 +527,95 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     leftovers_df.index = range(1, len(leftovers_df)+1)
                     st.dataframe(leftovers_df[leftover_cols])
 
-        # ——— Balanced Peace Mode Trade Circles (intra‑category) ———
-        st.markdown("#### Balanced Peace Mode Trade Circles (within each Level)")
+            # ——— Balanced Peace Mode Trade Circles via ILP ———
+            import pulp
 
-        level_order = {'Level A': 0, 'Level B': 1, 'Level C': 2}
-        balanced_records = []
+            st.markdown("#### Optimal Peace Mode Trade Circles (Min‑Cost Flow)")
 
-        # iterate per Peace Mode Level
-        for level in ['Level A', 'Level B', 'Level C']:
-            df_lvl = final_df[final_df['Peace Mode Level'] == level].copy()
-            if df_lvl.empty:
-                continue
+            level_order = {'Level A': 0, 'Level B': 1, 'Level C': 2}
+            optimal_records = []
+            leftover_records = []
 
-            # compute empty slots per circle
-            sizes = df_lvl.groupby('Trade Circle').size()
-            empties = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
+            for level in ['Level A', 'Level B', 'Level C']:
+                # extract nations and current circles in this level
+                df_lvl = final_df[final_df['Peace Mode Level'] == level].copy()
+                nations = df_lvl['Ruler Name'].tolist()
+                orig_circle = dict(zip(df_lvl['Ruler Name'], df_lvl['Trade Circle']))
 
-            # if more than one incomplete, break the weakest to fill the strongest
-            if len(empties) > 1:
-                # identify strongest (fewest empty) and weakest (most empty)
-                strong_id = min(empties, key=lambda c: empties[c])
-                weak_id   = max(empties, key=lambda c: empties[c])
+                existing_circles = sorted(df_lvl['Trade Circle'].unique())
+                max_new = 5  # allow up to 5 new circles per level
+                all_circles = existing_circles + list(range(max(existing_circles, default=0)+1,
+                                                            max(existing_circles, default=0)+1+max_new))
 
-                # pull out members of the weakest circle
-                weak_members = df_lvl[df_lvl['Trade Circle'] == weak_id].to_dict('records')
-                df_lvl = df_lvl[df_lvl['Trade Circle'] != weak_id]  # remove that circle
+                # build ILP
+                prob = pulp.LpProblem(f"TradeCircle_{level}", pulp.LpMaximize)
+                x = pulp.LpVariable.dicts("x",
+                    ((p, c) for p in nations for c in all_circles),
+                    cat='Binary'
+                )
 
-                # fill the strongest
-                slots = empties[strong_id]
-                to_move = weak_members[:slots]
-                remaining = weak_members[slots:]
+                # each nation assigned exactly once
+                for p in nations:
+                    prob += pulp.lpSum(x[p, c] for c in all_circles) == 1
 
-                for rec in to_move:
-                    rec['Trade Circle'] = strong_id
-                    df_lvl = pd.concat([df_lvl, pd.DataFrame([rec])], ignore_index=True)
+                # each circle holds at most 6
+                for c in all_circles:
+                    prob += pulp.lpSum(x[p, c] for p in nations) <= 6
 
-                # any leftover from the broken circle become a new circle
-                if remaining:
-                    next_c = int(df_lvl['Trade Circle'].max()) + 1
-                    for rec in remaining:
-                        rec['Trade Circle'] = next_c
-                    df_lvl = pd.concat([df_lvl, pd.DataFrame(remaining)], ignore_index=True)
+                # objective: maximize assignments, penalize moves
+                total_assigned = pulp.lpSum(x[p, c] for p in nations for c in all_circles)
+                reassign_cost = pulp.lpSum(
+                    x[p, c] * (
+                        0 if c == orig_circle[p]
+                        else (1 if c in existing_circles else 2)
+                    )
+                    for p in nations for c in all_circles
+                )
+                # large weighting on flow to force full assignment first
+                prob += 1000 * total_assigned - reassign_cost
 
-            balanced_records += df_lvl.to_dict('records')
+                prob.solve(pulp.PULP_CBC_CMD(msg=False))
 
-        # build and display balanced DataFrame
-        balanced_df = pd.DataFrame(balanced_records)
-        balanced_df = balanced_df.sort_values(
-            ['Peace Mode Level', 'Trade Circle', 'Ruler Name'],
-            key=lambda col: col.map(level_order) if col.name == 'Peace Mode Level' else col
-        ).reset_index(drop=True)
-        balanced_df.index += 1
+                # collect solution
+                for p in nations:
+                    assigned = [c for c in all_circles if pulp.value(x[p, c]) == 1]
+                    if not assigned:
+                        continue
+                    c = assigned[0]
+                    row = df_lvl[df_lvl['Ruler Name'] == p].iloc[0].to_dict()
+                    row['Trade Circle'] = int(c)
+                    optimal_records.append(row)
 
-        st.dataframe(balanced_df[[
-            "Peace Mode Level", "Trade Circle", "Ruler Name",
-            "Resource 1+2", "Alliance", "Team",
-            "Days Old", "Nation Drill Link", "Activity"
-        ]])
+                # any nation not in any filled circle (shouldn't happen) goes to leftovers
+                assigned_set = {r['Ruler Name'] for r in optimal_records if r['Peace Mode Level'] == level}
+                for p in set(nations) - assigned_set:
+                    leftover_records.append(df_lvl[df_lvl['Ruler Name'] == p].iloc[0].to_dict())
+
+            # build optimal DataFrame
+            optimal_df = pd.DataFrame(optimal_records)
+            optimal_df = optimal_df.sort_values(
+                ['Peace Mode Level', 'Trade Circle', 'Ruler Name'],
+                key=lambda col: col.map(level_order) if col.name == 'Peace Mode Level' else col
+            ).reset_index(drop=True)
+            optimal_df.index += 1
+
+            st.markdown("##### Optimal Trade Circles")
+            st.dataframe(optimal_df[[
+                "Peace Mode Level", "Trade Circle", "Ruler Name",
+                "Resource 1+2", "Alliance", "Team",
+                "Days Old", "Nation Drill Link", "Activity"
+            ]])
+
+            # leftovers
+            leftovers_df = pd.DataFrame(leftover_records,
+                                        columns=["Ruler Name","Resource 1+2","Alliance","Team",
+                                                "Days Old","Nation Drill Link","Activity"])
+            st.markdown("##### Leftover Players")
+            if leftovers_df.empty:
+                st.markdown("_None_")
+            else:
+                leftovers_df.index = range(1, len(leftovers_df)+1)
+                st.dataframe(leftovers_df)
 
 if __name__ == "__main__":
     main()
