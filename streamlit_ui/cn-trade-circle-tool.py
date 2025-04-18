@@ -527,5 +527,63 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     leftovers_df.index = range(1, len(leftovers_df)+1)
                     st.dataframe(leftovers_df[leftover_cols])
 
+        # ——— Balanced Peace Mode Trade Circles (intra‑category) ———
+        st.markdown("#### Balanced Peace Mode Trade Circles (within each Level)")
+
+        level_order = {'Level A': 0, 'Level B': 1, 'Level C': 2}
+        balanced_records = []
+
+        # iterate per Peace Mode Level
+        for level in ['Level A', 'Level B', 'Level C']:
+            df_lvl = final_df[final_df['Peace Mode Level'] == level].copy()
+            if df_lvl.empty:
+                continue
+
+            # compute empty slots per circle
+            sizes = df_lvl.groupby('Trade Circle').size()
+            empties = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
+
+            # if more than one incomplete, break the weakest to fill the strongest
+            if len(empties) > 1:
+                # identify strongest (fewest empty) and weakest (most empty)
+                strong_id = min(empties, key=lambda c: empties[c])
+                weak_id   = max(empties, key=lambda c: empties[c])
+
+                # pull out members of the weakest circle
+                weak_members = df_lvl[df_lvl['Trade Circle'] == weak_id].to_dict('records')
+                df_lvl = df_lvl[df_lvl['Trade Circle'] != weak_id]  # remove that circle
+
+                # fill the strongest
+                slots = empties[strong_id]
+                to_move = weak_members[:slots]
+                remaining = weak_members[slots:]
+
+                for rec in to_move:
+                    rec['Trade Circle'] = strong_id
+                    df_lvl = pd.concat([df_lvl, pd.DataFrame([rec])], ignore_index=True)
+
+                # any leftover from the broken circle become a new circle
+                if remaining:
+                    next_c = int(df_lvl['Trade Circle'].max()) + 1
+                    for rec in remaining:
+                        rec['Trade Circle'] = next_c
+                    df_lvl = pd.concat([df_lvl, pd.DataFrame(remaining)], ignore_index=True)
+
+            balanced_records += df_lvl.to_dict('records')
+
+        # build and display balanced DataFrame
+        balanced_df = pd.DataFrame(balanced_records)
+        balanced_df = balanced_df.sort_values(
+            ['Peace Mode Level', 'Trade Circle', 'Ruler Name'],
+            key=lambda col: col.map(level_order) if col.name == 'Peace Mode Level' else col
+        ).reset_index(drop=True)
+        balanced_df.index += 1
+
+        st.dataframe(balanced_df[[
+            "Peace Mode Level", "Trade Circle", "Ruler Name",
+            "Resource 1+2", "Alliance", "Team",
+            "Days Old", "Nation Drill Link", "Activity"
+        ]])
+
 if __name__ == "__main__":
     main()
