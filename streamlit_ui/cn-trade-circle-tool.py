@@ -527,95 +527,84 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     leftovers_df.index = range(1, len(leftovers_df)+1)
                     st.dataframe(leftovers_df[leftover_cols])
 
-            # ——— Balanced Peace Mode Trade Circles via ILP ———
-            import pulp
-
-            st.markdown("#### Optimal Peace Mode Trade Circles (Min‑Cost Flow)")
-
-            level_order = {'Level A': 0, 'Level B': 1, 'Level C': 2}
-            optimal_records = []
-            leftover_records = []
-
-            for level in ['Level A', 'Level B', 'Level C']:
-                # extract nations and current circles in this level
-                df_lvl = final_df[final_df['Peace Mode Level'] == level].copy()
-                nations = df_lvl['Ruler Name'].tolist()
-                orig_circle = dict(zip(df_lvl['Ruler Name'], df_lvl['Trade Circle']))
-
-                existing_circles = sorted(df_lvl['Trade Circle'].unique())
-                max_new = 5  # allow up to 5 new circles per level
-                all_circles = existing_circles + list(range(max(existing_circles, default=0)+1,
-                                                            max(existing_circles, default=0)+1+max_new))
-
-                # build ILP
-                prob = pulp.LpProblem(f"TradeCircle_{level}", pulp.LpMaximize)
-                x = pulp.LpVariable.dicts("x",
-                    ((p, c) for p in nations for c in all_circles),
-                    cat='Binary'
+        # ——— Optimal Peace Mode Trade Circles via ILP ———
+        with st.expander("Optimal Peace Mode Trade Circles (Min‑Cost Flow)"):
+            try:
+                import pulp
+            except ImportError:
+                st.error(
+                    "🚨 *PuLP* is not installed. "
+                    "Please add `pulp` to your requirements (e.g. `pip install pulp` or add it to `requirements.txt`)."
                 )
-
-                # each nation assigned exactly once
-                for p in nations:
-                    prob += pulp.lpSum(x[p, c] for c in all_circles) == 1
-
-                # each circle holds at most 6
-                for c in all_circles:
-                    prob += pulp.lpSum(x[p, c] for p in nations) <= 6
-
-                # objective: maximize assignments, penalize moves
-                total_assigned = pulp.lpSum(x[p, c] for p in nations for c in all_circles)
-                reassign_cost = pulp.lpSum(
-                    x[p, c] * (
-                        0 if c == orig_circle[p]
-                        else (1 if c in existing_circles else 2)
-                    )
-                    for p in nations for c in all_circles
-                )
-                # large weighting on flow to force full assignment first
-                prob += 1000 * total_assigned - reassign_cost
-
-                prob.solve(pulp.PULP_CBC_CMD(msg=False))
-
-                # collect solution
-                for p in nations:
-                    assigned = [c for c in all_circles if pulp.value(x[p, c]) == 1]
-                    if not assigned:
-                        continue
-                    c = assigned[0]
-                    row = df_lvl[df_lvl['Ruler Name'] == p].iloc[0].to_dict()
-                    row['Trade Circle'] = int(c)
-                    optimal_records.append(row)
-
-                # any nation not in any filled circle (shouldn't happen) goes to leftovers
-                assigned_set = {r['Ruler Name'] for r in optimal_records if r['Peace Mode Level'] == level}
-                for p in set(nations) - assigned_set:
-                    leftover_records.append(df_lvl[df_lvl['Ruler Name'] == p].iloc[0].to_dict())
-
-            # build optimal DataFrame
-            optimal_df = pd.DataFrame(optimal_records)
-            optimal_df = optimal_df.sort_values(
-                ['Peace Mode Level', 'Trade Circle', 'Ruler Name'],
-                key=lambda col: col.map(level_order) if col.name == 'Peace Mode Level' else col
-            ).reset_index(drop=True)
-            optimal_df.index += 1
-
-            st.markdown("##### Optimal Trade Circles")
-            st.dataframe(optimal_df[[
-                "Peace Mode Level", "Trade Circle", "Ruler Name",
-                "Resource 1+2", "Alliance", "Team",
-                "Days Old", "Nation Drill Link", "Activity"
-            ]])
-
-            # leftovers
-            leftovers_df = pd.DataFrame(leftover_records,
-                                        columns=["Ruler Name","Resource 1+2","Alliance","Team",
-                                                "Days Old","Nation Drill Link","Activity"])
-            st.markdown("##### Leftover Players")
-            if leftovers_df.empty:
-                st.markdown("_None_")
             else:
-                leftovers_df.index = range(1, len(leftovers_df)+1)
-                st.dataframe(leftovers_df)
+                level_order = {'Level A': 0, 'Level B': 1, 'Level C': 2}
+                optimal_records = []
+                leftover_records = []
+
+                for level in ['Level A', 'Level B', 'Level C']:
+                    # filter for this level
+                    df_lvl = final_df[final_df['Peace Mode Level'] == level].copy()
+                    if df_lvl.empty:
+                        continue
+
+                    nations       = df_lvl['Ruler Name'].tolist()
+                    orig_circle   = dict(zip(nations, df_lvl['Trade Circle']))
+                    existing_cs   = sorted(df_lvl['Trade Circle'].unique())
+                    max_new       = 3   # tweak: how many brand new circles you’ll allow
+                    all_circles   = existing_cs + list(range(existing_cs[-1] + 1, existing_cs[-1] + 1 + max_new))
+
+                    # build LP
+                    prob = pulp.LpProblem(f"PC_{level}", pulp.LpMaximize)
+                    x = pulp.LpVariable.dicts(
+                        "assign", ((p, c) for p in nations for c in all_circles),
+                        cat='Binary'
+                    )
+
+                    # each nation assigned once
+                    for p in nations:
+                        prob += pulp.lpSum(x[p, c] for c in all_circles) == 1
+
+                    # each circle ≤ 6 members
+                    for c in all_circles:
+                        prob += pulp.lpSum(x[p, c] for p in nations) <= 6
+
+                    # objective: max flow (1000 per assigned) – reassign cost
+                    flow = pulp.lpSum(x[p, c] for p in nations for c in all_circles)
+                    cost = pulp.lpSum(
+                        x[p, c] * (
+                            0 if c == orig_circle[p]
+                            else (1 if c in existing_cs else 2)
+                        )
+                        for p in nations for c in all_circles
+                    )
+                    prob += 1000 * flow - cost
+
+                    prob.solve(pulp.PULP_CBC_CMD(msg=False))
+
+                    # collect assignments
+                    for p in nations:
+                        for c in all_circles:
+                            if pulp.value(x[p, c]) == 1:
+                                row = df_lvl[df_lvl['Ruler Name'] == p].iloc[0].to_dict()
+                                row['Trade Circle'] = int(c)
+                                optimal_records.append(row)
+                                break
+
+                # build and display
+                opt_df = pd.DataFrame(optimal_records)
+                opt_df = opt_df.sort_values(
+                    ['Peace Mode Level','Trade Circle','Ruler Name'],
+                    key=lambda col: col.map(level_order) if col.name=='Peace Mode Level' else col
+                ).reset_index(drop=True)
+                opt_df.index += 1
+
+                st.markdown("##### Optimal Trade Circles")
+                st.dataframe(opt_df[[
+                    "Peace Mode Level","Trade Circle","Ruler Name",
+                    "Resource 1+2","Alliance","Team",
+                    "Days Old","Nation Drill Link","Activity"
+                ]])
+
 
 if __name__ == "__main__":
     main()
