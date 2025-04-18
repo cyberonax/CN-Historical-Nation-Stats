@@ -438,108 +438,123 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
         # ——— Peace Mode Trade Circles ———
         with st.expander("Peace Mode Trade Circles"):
-            # 1. Merge tc_df with details so all fields (incl. Days Old) are present
+            # 1. Merge tc_df with details so all fields are present
             df_peace = (
                 tc_df[["Trade Circle", "Ruler Name"]]
                 .merge(
                     details[[
-                        "Ruler Name", "Resource 1+2", "Alliance",
-                        "Team", "Days Old", "Nation Drill Link", "Activity"
+                        "Ruler Name", "Days Old",
+                        "Resource 1+2", "Alliance",
+                        "Team", "Nation Drill Link",
+                        "Activity"
                     ]],
                     on="Ruler Name",
                     how="left"
                 )
             )
 
-            # 2. Strip non‑digits and cast Days Old → int for correct bucketing
+            # 2. Strip only commas & whitespace, then parse to int
             df_peace["Days Old"] = (
                 df_peace["Days Old"]
                     .astype(str)
-                    .str.replace(r"[^\d]", "", regex=True)
-                    .replace("", "0")
-                    .astype(int)
+                    .str.replace(",", "", regex=False)
+                    .str.strip()
+            )
+            df_peace["Days Old"] = (
+                pd.to_numeric(df_peace["Days Old"], errors="coerce")
+                  .fillna(0)
+                  .round()
+                  .astype(int)
             )
 
-            # 3. Define Peace Mode levels
-            def peace_level(days):
-                if days < 1000:
+            # 3. DEBUG: inspect cleaning & bucket counts (remove these once fixed)
+            st.write("After cleaning Days Old:")
+            st.dataframe(df_peace[["Ruler Name","Days Old"]].head(10))
+            st.write("Bucket counts:")
+            st.write(
+                df_peace["Days Old"]
+                    .apply(lambda d: "A" if d<1000 else "B" if d<2000 else "C")
+                    .value_counts()
+            )
+
+            # 4. Define peace_level and assign
+            def peace_level(d):
+                if d < 1000:
                     return "A"
-                elif days < 2000:
+                elif d < 2000:
                     return "B"
                 else:
                     return "C"
 
             df_peace["Peace Level"] = df_peace["Days Old"].apply(peace_level)
 
-            # 4. Prepare full eligible pool and clean its Days Old too
+            # 5. Prepare eligible pool and clean its Days Old the same way
             eligible = details[[
-                "Ruler Name", "Resource 1+2", "Alliance",
-                "Team", "Days Old", "Nation Drill Link", "Activity"
+                "Ruler Name", "Days Old",
+                "Resource 1+2", "Alliance",
+                "Team", "Nation Drill Link",
+                "Activity"
             ]].copy()
             eligible["Days Old"] = (
                 eligible["Days Old"]
                     .astype(str)
-                    .str.replace(r"[^\d]", "", regex=True)
-                    .replace("", "0")
-                    .astype(int)
+                    .str.replace(",", "", regex=False)
+                    .str.strip()
+            )
+            eligible["Days Old"] = (
+                pd.to_numeric(eligible["Days Old"], errors="coerce")
+                  .fillna(0)
+                  .round()
+                  .astype(int)
             )
             eligible["Peace Level"] = eligible["Days Old"].apply(peace_level)
             eligible_idx = eligible.set_index("Ruler Name")
 
-            # 5. Initialize existing circles by Peace Level
-            circles = {lvl: {} for lvl in ["A", "B", "C"]}
+            # 6. Initialize existing circles by level
+            circles = {lvl: {} for lvl in ["A","B","C"]}
             for lvl in circles:
                 grp = df_peace[df_peace["Peace Level"] == lvl]
                 for cid, sub in grp.groupby("Trade Circle"):
                     circles[lvl][cid] = list(sub["Ruler Name"])
 
-            # 6. Find unmatched players per level
+            # 7. Find unmatched per level
             unmatched = {}
             for lvl in circles:
                 assigned = {r for members in circles[lvl].values() for r in members}
                 pool     = set(eligible[eligible["Peace Level"] == lvl]["Ruler Name"])
                 unmatched[lvl] = sorted(pool - assigned, key=str.lower)
 
-            # 7. Fill incomplete circles within each level (fewest gaps first)
+            # 8. Fill incomplete circles within level
             for lvl in circles:
                 for cid, members in sorted(circles[lvl].items(),
-                                          key=lambda x: (6 - len(x[1]), x[0])):
+                                          key=lambda x: (6-len(x[1]), x[0])):
                     while len(members) < 6 and unmatched[lvl]:
                         members.append(unmatched[lvl].pop(0))
                     circles[lvl][cid] = members
 
-            # 8. Cross‑level rebalance: only siphon off exactly the # needed
+            # 9. Cross‑level rebalance (siphon only needed players)
             def break_and_reassign(from_lvls, to_lvl):
-                # gather donor circles
                 for lvl in from_lvls:
-                    # we’ll iterate over a copy of the keys because we may delete some
                     for cid in list(circles[lvl].keys()):
-                        members = circles[lvl][cid]
                         needed = 6 - len(circles[to_lvl].get(cid, []))
                         if needed <= 0:
                             continue
-
-                        # pick the first `needed` players
+                        members = circles[lvl][cid]
                         to_move = members[:needed]
-                        # append them into the *same* circle‐id in the target level
                         circles[to_lvl].setdefault(cid, []).extend(to_move)
-                        
-                        # remove them from the donor
                         remaining = members[needed:]
                         if remaining:
                             circles[lvl][cid] = remaining
                         else:
-                            # donor is now empty
                             del circles[lvl][cid]
 
-            # then use
             break_and_reassign(["A"], "B")
-            break_and_reassign(["A", "B"], "C")
+            break_and_reassign(["A","B"], "C")
 
-            # 9. Build and display final Trade Circles table
+            # 10. Build final DataFrame
             final = []
-            for lvl in ["A", "B", "C"]:
-                for idx, (cid, members) in enumerate(sorted(circles[lvl].items()), start=1):
+            for lvl in ["A","B","C"]:
+                for idx,(cid,members) in enumerate(sorted(circles[lvl].items()), start=1):
                     for name in sorted(members, key=str.lower):
                         if name not in eligible_idx.index:
                             continue
@@ -554,17 +569,15 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             "Nation Drill Link": row["Nation Drill Link"],
                             "Activity":          row["Activity"]
                         })
-            cols = [
-                "Trade Circle", "Ruler Name", "Resource 1+2",
-                "Alliance", "Team", "Days Old", "Nation Drill Link", "Activity"
-            ]
+            cols = ["Trade Circle","Ruler Name","Resource 1+2",
+                    "Alliance","Team","Days Old","Nation Drill Link","Activity"]
             final_df = pd.DataFrame(final, columns=cols)
             st.markdown("#### Peace Mode Trade Circles (Levels A, B, C)")
             st.dataframe(final_df[cols])
 
-            # 10. Build and display leftover players
+            # 11. Leftover players
             leftovers = []
-            for lvl, names in unmatched.items():
+            for lvl,names in unmatched.items():
                 for name in names:
                     if name not in eligible_idx.index:
                         continue
@@ -579,10 +592,8 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         "Activity":          r["Activity"],
                         "Peace Level":       lvl
                     })
-            lw_cols = [
-                "Ruler Name", "Resource 1+2", "Alliance", "Team",
-                "Days Old", "Nation Drill Link", "Activity", "Peace Level"
-            ]
+            lw_cols = ["Ruler Name","Resource 1+2","Alliance","Team",
+                      "Days Old","Nation Drill Link","Activity","Peace Level"]
             leftovers_df = pd.DataFrame(leftovers, columns=lw_cols)
             st.markdown("#### Leftover Players")
             st.dataframe(leftovers_df[lw_cols])
