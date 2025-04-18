@@ -141,7 +141,7 @@ def main():
     with st.expander("Raw Alliance Data"):
         st.dataframe(df_all)
 
-    st.markdown(f"### Charts for Alliance: {selected_alliance}")
+    st.markdown(f"### Optimizing Trade Circles for Alliance: {selected_alliance}")
 
     # Identify most recent snapshot and majority team
     latest_date      = df_all['date'].max()
