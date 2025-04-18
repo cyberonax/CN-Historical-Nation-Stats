@@ -438,91 +438,120 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
         # ——— Peace Mode Trade Circles ———
         with st.expander("Peace Mode Trade Circles"):
-            # helper to assign Peace Mode Level
-            def peace_level(days):
-                if days < 1000:
-                    return 'Level A'
-                elif days < 2000:
-                    return 'Level B'
-                else:
-                    return 'Level C'
 
-            # base circles and unmatched, with levels
+            def peace_level(days):
+                if days < 1000: return 'Level A'
+                if days < 2000: return 'Level B'
+                return 'Level C'
+
+            # annotate base & unmatched
             pm_base = tc_df.copy()
             pm_base['Peace Mode Level'] = pm_base['Days Old'].apply(peace_level)
-
             pm_unmatched = details[~details['Ruler Name'].isin(pm_base['Ruler Name'])].copy()
             pm_unmatched['Peace Mode Level'] = pm_unmatched['Days Old'].apply(peace_level)
 
-            final_records = []
-            leftover_records = []
+            final_records = []    # all assigned
+            leftovers = []        # truly unassigned
+            repurposed = {}       # circle_id -> new level
 
-            # process each Peace Mode Level in order A → B → C
-            for level in ['Level A', 'Level B', 'Level C']:
-                lvl_base = pm_base[pm_base['Peace Mode Level'] == level].copy()
-                lvl_un   = pm_unmatched[pm_unmatched['Peace Mode Level'] == level].copy()
+            # helper to break weakest circles in `from_level` to free up IDs for `to_level`
+            def break_weakest(from_level, to_level, needed_slots):
+                # count empties per circle in that level
+                lvl = [r for r in final_records if r['Peace Mode Level']==from_level]
+                empties = {}
+                for cid, grp in pd.DataFrame(lvl).groupby('Trade Circle'):
+                    empties[cid] = 6 - len(grp)
+                # sort by *descending* empties (weakest first)
+                for cid, empty in sorted(empties.items(), key=lambda x: -x[1]):
+                    # repurpose this circle ID
+                    to_break = [r for r in final_records
+                                if r['Peace Mode Level']==from_level and r['Trade Circle']==cid]
+                    for r in to_break:
+                        final_records.remove(r)
+                    repurposed[cid] = to_level
+                    needed_slots -= 6
+                    if needed_slots <= 0:
+                        break
+                return max(0, needed_slots)
 
-                # count existing members in each circle
-                sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
-                incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
-                inc_sorted = sorted(incomplete.items(), key=lambda x: x[1])  # fewest empty slots first
-
-                # fill incomplete circles first
-                for circle_id, slots in inc_sorted:
-                    to_add = min(slots, len(lvl_un))
-                    adds = lvl_un.iloc[:to_add]
-                    lvl_un = lvl_un.iloc[to_add:]
-                    for _, row in adds.iterrows():
-                        rec = row.to_dict()
-                        rec['Trade Circle'] = circle_id
+            # process levels in priority order
+            levels = ['Level A','Level B','Level C']
+            for lvl in levels:
+                # start with original circles + any repurposed IDs
+                orig_ids = sorted(pm_base.loc[pm_base['Peace Mode Level']==lvl, 'Trade Circle'].unique())
+                all_ids  = orig_ids + [cid for cid,t in repurposed.items() if t==lvl]
+                # track how many slots each has left
+                slots = {cid: 6 for cid in all_ids}
+                # subtract existing members
+                for _, row in pm_base[pm_base['Peace Mode Level']==lvl].iterrows():
+                    cid = row['Trade Circle']
+                    if cid in slots:
+                        slots[cid] -= 1
+                # fill from unmatched
+                un = pm_unmatched[pm_unmatched['Peace Mode Level']==lvl].copy()
+                # first pass: existing circles sorted by fewest empty slots
+                for cid, empty in sorted(slots.items(), key=lambda x: x[1]):
+                    while slots[cid]>0 and not un.empty:
+                        row = un.iloc[0]; un = un.iloc[1:]
+                        rec = row.to_dict(); rec['Trade Circle']=cid; rec['Peace Mode Level']=lvl
                         final_records.append(rec)
+                        slots[cid] -= 1
 
-                # keep all original members in that level
-                for _, row in lvl_base.iterrows():
-                    final_records.append(row.to_dict())
+                # check if still some circles incomplete *and* not enough unmatched left
+                deficit = sum(slots[c] for c in slots)
+                if deficit > 0 and len(un) < deficit:
+                    # break from all *lower* levels in order
+                    for lower in levels[:levels.index(lvl)]:
+                        deficit = break_weakest(lower, lvl, deficit)
+                        if deficit <= 0:
+                            # now that we’ve freed enough IDs, add them to slots
+                            for cid,tgt in repurposed.items():
+                                if tgt==lvl and cid not in slots:
+                                    slots[cid] = 6
+                            break
+                    # fill newly repurposed circles
+                    for cid, empty in sorted({c:slots[c] for c in slots if slots[c]>0}.items(), key=lambda x: x[1]):
+                        while slots[cid]>0 and not un.empty:
+                            row = un.iloc[0]; un = un.iloc[1:]
+                            rec = row.to_dict(); rec['Trade Circle']=cid; rec['Peace Mode Level']=lvl
+                            final_records.append(rec)
+                            slots[cid] -= 1
 
-                # form new full circles from remaining unmatched
-                max_circle = int(lvl_base['Trade Circle'].max()) if not lvl_base.empty else 0
-                next_circle = max_circle + 1
-                while len(lvl_un) >= 6:
-                    group = lvl_un.iloc[:6]
-                    lvl_un = lvl_un.iloc[6:]
-                    for _, row in group.iterrows():
-                        rec = row.to_dict()
-                        rec['Trade Circle'] = next_circle
-                        final_records.append(rec)
-                    next_circle += 1
+                # any still‑unmatched here are leftovers
+                leftovers += [r.to_dict() for _, r in un.iterrows()]
 
-                # anything left here becomes leftovers
-                leftover_records += [r.to_dict() for _, r in lvl_un.iterrows()]
+                # finally, add back all the truly original members of this level
+                for _, row in pm_base[pm_base['Peace Mode Level']==lvl].iterrows():
+                    rec = row.to_dict(); rec['Peace Mode Level']=lvl
+                    final_records.append(rec)
 
             # build final DataFrame
-            final_df = pd.DataFrame(final_records)
-            # sort by level, then circle, then ruler
-            level_order = {'Level A':0,'Level B':1,'Level C':2}
-            final_df = final_df.sort_values(
+            df_final = pd.DataFrame(final_records)
+            order_map = {'Level A':0,'Level B':1,'Level C':2}
+            df_final = df_final.sort_values(
                 ['Peace Mode Level','Trade Circle','Ruler Name'],
-                key=lambda col: col.map(level_order) if col.name=='Peace Mode Level' else col
+                key=lambda col: col.map(order_map) if col.name=='Peace Mode Level' else col
             ).reset_index(drop=True)
-            final_df.index += 1
+            df_final.index += 1
 
             st.markdown("#### Final Peace Mode Trade Circles")
-            st.dataframe(final_df[[
+            st.dataframe(df_final[[
                 "Peace Mode Level","Trade Circle","Ruler Name",
                 "Resource 1+2","Alliance","Team",
                 "Days Old","Nation Drill Link","Activity"
             ]])
 
-            # build leftovers DataFrame with explicit columns to avoid KeyErrors
-            leftover_cols = ["Ruler Name","Resource 1+2","Alliance","Team","Days Old","Nation Drill Link","Activity"]
-            leftovers_df = pd.DataFrame(leftover_records, columns=leftover_cols)
-
+            # leftovers
+            df_left = pd.DataFrame(leftovers, columns=[
+                "Ruler Name","Resource 1+2","Alliance","Team",
+                "Days Old","Nation Drill Link","Activity"
+            ]).reset_index(drop=True)
+            df_left.index += 1
             st.markdown("#### Players Left Over")
-            if leftovers_df.empty:
-                st.markdown("_No unmatched players remain._")
+            if df_left.empty:
+                st.markdown("_None!_")
             else:
-                leftovers_df.index = range(1, len(leftovers_df)+1)
-                st.dataframe(leftovers_df[leftover_cols])
+                st.dataframe(df_left)
 
 if __name__ == "__main__":
     main()
