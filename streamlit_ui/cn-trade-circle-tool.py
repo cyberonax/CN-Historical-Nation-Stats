@@ -573,3 +573,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 st.markdown("_No unmatched players remain!_")
             else:
                 st.dataframe(df_left)
+
+if __name__ == "__main__":
+    main()
