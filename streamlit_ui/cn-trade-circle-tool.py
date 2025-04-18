@@ -317,5 +317,50 @@ def main():
       Nations that are **2000 days or older**. These are mature nations with longstanding resource setups, typically expecting more stable and optimized resource combinations.
     """)
 
+        # ——— New section: Input Trade Circless ———
+        with st.expander("Input Trade Circles"):
+            # Inputs
+            circles = [
+                [s.strip() for s in block.splitlines() if s.strip().lower() != "x"]
+                for block in trade_input.split("\n\n")
+            ]
+            filter_set = {s.strip() for s in filter_input.splitlines() if s.strip()}
+            
+            # Build a table of (circle#, ruler)
+            tc = pd.DataFrame(
+                [(i+1, name) for i, blk in enumerate(circles) for name in blk],
+                columns=["Trade Circle", "Ruler Name"]
+            )
+            
+            # Join in the latest snapshot, avg inactivity, compute extras, then filter
+            df_tc = (
+                tc
+                .merge(
+                    latest_snapshot.assign(
+                        **{"Resource 1+2": latest_snapshot.apply(get_resource_1_2, axis=1)},
+                    )[
+                        ["Ruler Name","Resource 1+2","Alliance","Team","Created","Nation ID"]
+                    ],
+                    on="Ruler Name", how="inner"
+                )
+                .assign(
+                    Days_Old=lambda d: (pd.Timestamp.now() - pd.to_datetime(d["Created"])).dt.days,
+                    **{"Nation Drill Link":
+                        lambda d: "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
+                                  + d["Nation ID"].astype(str)},
+                    Activity=lambda d: d["Ruler Name"]
+                                      .map(avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"])
+                )
+                .query(
+                    "Activity < 14 and Alliance == @selected_alliance and Team == @majority_team"
+                )
+                .loc[lambda d: ~d["Ruler Name"].isin(filter_set),
+                     ["Trade Circle","Ruler Name","Resource 1+2",
+                      "Alliance","Team","Days_Old","Nation Drill Link","Activity"]]
+                .reset_index(drop=True)
+            )
+        
+            st.dataframe(df_tc)
+
 if __name__ == "__main__":
     main()
