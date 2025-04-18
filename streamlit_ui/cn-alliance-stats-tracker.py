@@ -1014,7 +1014,6 @@ def main():
         
         # Gather your dataframes
         dfs = {
-            "Raw Data": st.session_state.df,
             "Aggregated Alliance Metrics": agg_df,
             "Individual Nation Metrics": df_indiv
         }
@@ -1036,7 +1035,7 @@ def main():
         output.seek(0)
 
         # Build filename with today's date (YYYYMMDD)
-        date_str = datetime.now().strftime("%Y%m%d")
+        date_str = datetime.now().strftime("%Y-%m-%d")
         file_name = f"cybernations_timeline_stats_data_{date_str}.xlsx"
 
         # Provide download button
