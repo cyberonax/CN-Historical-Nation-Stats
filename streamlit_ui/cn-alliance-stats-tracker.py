@@ -1007,40 +1007,38 @@ def main():
                 st.table(alt_df)
 
     # Download All Data to Excel button
-    if st.button("Download All Data to Excel"):
-        # Prepare in-memory output
+    # Build & cache the Excel bytes in session_state so it's only created once
+    if "excel_bytes" not in st.session_state:
         output = io.BytesIO()
-        
-        # Gather your dataframes
-        dfs = {
-            "Raw Data": st.session_state.df,
-            "Aggregated Alliance Metrics": agg_df,
-            "Individual Nation Metrics": df_indiv
-        }
-        # Include inactivity tracker if it was generated
-        if "alt_df" in locals():
-            dfs["Inactivity Tracker"] = alt_df
-
-        # Write to Excel with auto column widths
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            dfs = {
+                "Raw Data": st.session_state.df,
+                "Aggregated Alliance Metrics": agg_df,
+                "Individual Nation Metrics": df_indiv
+            }
+            if "alt_df" in locals():
+                dfs["Inactivity Tracker"] = alt_df
+
             for sheet_name, df in dfs.items():
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
-                worksheet = writer.sheets[sheet_name]
-                # Auto-fit each column
+                ws = writer.sheets[sheet_name]
                 for idx, col in enumerate(df.columns):
                     max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
-                    worksheet.set_column(idx, idx, max_len)
-
-        # Seek back to start so Streamlit can read the buffer
+                    ws.set_column(idx, idx, max_len)
         output.seek(0)
+        st.session_state["excel_bytes"] = output.getvalue()
 
-        # Provide download button
-        st.download_button(
-            label="Download All Data to Excel",
-            data=output.getvalue(),
-            file_name="CyberNations_Timeline_Stats_Data.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    # Attach today's date to filename
+    today_str = datetime.now().strftime("%Y%m%d")
+    filename = f"cybernations_timeline_stats_{today_str}.xlsx"
+
+    # Always show the download button (will download the cached bytes)
+    st.download_button(
+        label="Download All Data to Excel",
+        data=st.session_state["excel_bytes"],
+        file_name=filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 if __name__ == "__main__":
     main()
