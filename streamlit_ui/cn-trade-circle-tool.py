@@ -509,26 +509,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 ).reset_index(drop=True)
                 final_df.index += 1
 
-                st.markdown("#### Final Peace Mode Trade Circles")
-                st.dataframe(final_df[[
-                    "Peace Mode Level","Trade Circle","Ruler Name",
-                    "Resource 1+2","Alliance","Team",
-                    "Days Old","Nation Drill Link","Activity"
-                ]])
-
                 # build leftovers DataFrame with explicit columns to avoid KeyErrors
                 leftover_cols = ["Ruler Name","Resource 1+2","Alliance","Team","Days Old","Nation Drill Link","Activity"]
                 leftovers_df = pd.DataFrame(leftover_records, columns=leftover_cols)
 
-                st.markdown("#### Players Left Over")
-                if leftovers_df.empty:
-                    st.markdown("_No unmatched players remain._")
-                else:
-                    leftovers_df.index = range(1, len(leftovers_df)+1)
-                    st.dataframe(leftovers_df[leftover_cols])
-
-        # ——— Optimal Peace Mode Trade Circles via ILP with Circle‐Usage Penalty ———
-        with st.expander("Optimal Peace Mode Trade Circles"):
             # ensure there is processed data
             if 'final_df' not in locals() or final_df.empty:
                 st.markdown("_No processed Trade Circles to optimize. Please fill in the Input Trade Circles above._")
