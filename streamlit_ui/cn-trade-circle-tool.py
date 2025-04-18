@@ -746,6 +746,21 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                 st.markdown("##### Assign Peacetime Recommended Resources")
                 st.dataframe(styled_rec, use_container_width=True)
+                
+                # Copy‐to‐Clipboard for Peacetime
+                peace_csv = rec_df.to_csv(index=False)
+                components.html(
+                    f"""
+                    <textarea id="peace-data" style="display:none;">{peace_csv}</textarea>
+                    <button
+                      onclick="navigator.clipboard.writeText(document.getElementById('peace-data').value)"
+                      style="margin-top:10px; padding:4px 8px;"
+                    >
+                      Copy Peacetime Table to Clipboard
+                    </button>
+                    """,
+                    height=60,
+                )
 
         # ——— Assign Wartime Recommended Resources ———
         with st.expander("Assign Wartime Recommended Resources"):
@@ -889,6 +904,38 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                 st.markdown("##### Assign Wartime Recommended Resources")
                 st.dataframe(styled_war, use_container_width=True)
+
+                # Copy‐to‐Clipboard for Wartime
+                war_csv = war_df.to_csv(index=False)
+                components.html(
+                    f"""
+                    <textarea id="war-data" style="display:none;">{war_csv}</textarea>
+                    <button
+                      onclick="navigator.clipboard.writeText(document.getElementById('war-data').value)"
+                      style="margin-top:10px; padding:4px 8px;"
+                    >
+                      Copy Wartime Table to Clipboard
+                    </button>
+                    """,
+                    height=60,
+                )
+
+        # ——— Download everything as a single XLSX ———
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+            rec_df.to_excel(writer, sheet_name="Peacetime", index=False)
+            war_df.to_excel(writer, sheet_name="Wartime",    index=False)
+            # (optionally) add more sheets: final_df, leftovers_df, etc.
+            writer.save()
+        buffer.seek(0)
+        
+        st.download_button(
+            "Download All Data as Excel",
+            data=buffer,
+            file_name="trade_circles.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Includes Peacetime & Wartime sheets"
+        )
 
 if __name__ == "__main__":
     main()
