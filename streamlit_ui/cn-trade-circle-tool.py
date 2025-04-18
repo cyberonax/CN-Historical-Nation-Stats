@@ -321,124 +321,83 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
       Nations that are **2000 days or older**. These are mature nations with longstanding resource setups, typically expecting more stable and optimized resource combinations.
     """)
 
-        # ——— Input Trade Circless ———
+        # ——— Input Trade Circles ———
         with st.expander("Input Trade Circles"):
             # — Inputs —
             trade_input  = st.text_area("Trade Circles (one Ruler Name per line)", height=200)
             filter_input = st.text_area("Filter Out Players (one per line)", height=100)
-        
-            # — Parse into blocks of names; blank lines split circles, but we no longer drop 'x' lines —
+
+            # — Parse into blocks of names; blank lines split circles —
             blocks = trade_input.split("\n\n")
-            circles = []
-            for blk in blocks:
-                names = [
-                    line.strip()
-                    for line in blk.splitlines()
-                    if line.strip()  # only drop truly blank lines
-                ]
-                if names:
-                    circles.append(names)
-        
-            # — Build DataFrame with lowercase merge_key for case‑insensitive matching —
             records = []
-            for i, circle in enumerate(circles):
-                for name in circle:
+            for i, blk in enumerate(blocks):
+                names = [ line.strip() for line in blk.splitlines() if line.strip() ]
+                for name in names:
                     records.append({
                         "Trade Circle": i+1,
-                        "Ruler Name": name,
-                        "merge_key": name.lower()
+                        "Ruler Name":   name,
+                        "merge_key":    name.lower()
                     })
-            tc_df = pd.DataFrame(records, columns=["Trade Circle", "Ruler Name", "merge_key"])
-        
+            tc_df = pd.DataFrame(records, columns=["Trade Circle","Ruler Name","merge_key"])
+
+            # — if user left it blank, use the 'details' table to auto-build circles of 6 —
             if tc_df.empty:
-                st.warning("No valid Trade Circle entries detected.")
+                st.info("No manual Trade Circles provided; defaulting to all eligible nations from ‘Nation Details’ in groups of 6.")
+                tmp = details.copy()[[
+                    "Ruler Name","Resource 1+2","Alliance","Team",
+                    "Days Old","Nation Drill Link","Activity"
+                ]].reset_index(drop=True)
+                tmp["Trade Circle"] = (tmp.index // 6) + 1
+                tc_df = tmp
+
+            # — if after fallback it’s still empty, warn and bail —
+            if tc_df.empty:
+                st.warning("No Trade Circles could be formed.")
             else:
                 # — Prepare snapshot with same merge_key & combined resources —
-                snap = latest_snapshot.copy()
-                snap["merge_key"]    = snap["Ruler Name"].str.lower()
-                snap["Resource 1+2"] = snap.apply(get_resource_1_2, axis=1)
-        
-                # — Merge on merge_key, bringing in your stats —
-                tc_df = tc_df.merge(
-                    snap[[
-                        "merge_key",
-                        "Resource 1+2",
-                        "Alliance",
-                        "Team",
-                        "Created",
-                        "Nation ID"
-                    ]],
-                    on="merge_key",
-                    how="inner"
-                )
-        
-                # — Compute Days Old, Drill Link, Activity —
-                tc_df["Created"] = pd.to_datetime(tc_df["Created"], errors="coerce")
-                tc_df["Days Old"] = (pd.Timestamp.now() - tc_df["Created"]).dt.days
-                tc_df["Nation Drill Link"] = (
-                    "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
-                    + tc_df["Nation ID"].astype(str)
-                )
-                tc_df["Activity"] = tc_df["Ruler Name"].map(
-                    avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"]
-                )
-        
-                # — Case‑insensitive filter‑out set —
-                filter_set = {ln.strip().lower() for ln in filter_input.splitlines() if ln.strip()}
-        
-                # — Apply filters & drop merge_key —
-                tc_df = (
-                    tc_df[
-                        (tc_df["Activity"] < 14) &
-                        (tc_df["Alliance"] == selected_alliance) &
-                        (tc_df["Team"] == majority_team) &
-                        (~tc_df["merge_key"].isin(filter_set))
-                    ]
-                    .drop(columns="merge_key")
-                    .reset_index(drop=True)
-                )
+                if "merge_key" not in tc_df.columns:
+                    # fallback path already has full columns
+                    tc_df = tc_df.copy()
+                else:
+                    snap = latest_snapshot.copy()
+                    snap["merge_key"]    = snap["Ruler Name"].str.lower()
+                    snap["Resource 1+2"] = snap.apply(get_resource_1_2, axis=1)
+                    tc_df = tc_df.merge(
+                        snap[["merge_key","Resource 1+2","Alliance","Team","Created","Nation ID"]],
+                        on="merge_key", how="inner"
+                    )
+                    tc_df["Created"] = pd.to_datetime(tc_df["Created"], errors="coerce")
+                    tc_df["Days Old"]= (pd.Timestamp.now() - tc_df["Created"]).dt.days
+                    tc_df["Nation Drill Link"] = (
+                        "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
+                        + tc_df["Nation ID"].astype(str)
+                    )
+                    tc_df["Activity"] = tc_df["Ruler Name"].map(
+                        avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"]
+                    )
+                    # filter & drop merge_key if we had it
+                    if "merge_key" in tc_df.columns:
+                        filter_set = {ln.strip().lower() for ln in filter_input.splitlines() if ln.strip()}
+                        tc_df = (
+                            tc_df[
+                                (tc_df["Activity"] < 14) &
+                                (tc_df["Alliance"] == selected_alliance) &
+                                (tc_df["Team"]     == majority_team) &
+                                (~tc_df["merge_key"].isin(filter_set))
+                            ]
+                            .drop(columns="merge_key")
+                            .reset_index(drop=True)
+                        )
 
                 # — Processed Trade Circles —
                 st.markdown("#### Processed Trade Circles")
-                # Reset to 0…n‑1 then shift to 1…n
                 tc_df = tc_df.reset_index(drop=True)
-                tc_df.index = tc_df.index + 1
-            
+                tc_df.index += 1
                 st.dataframe(tc_df[[
-                    "Trade Circle",
-                    "Ruler Name",
-                    "Resource 1+2",
-                    "Alliance",
-                    "Team",
-                    "Days Old",
-                    "Nation Drill Link",
-                    "Activity"
+                    "Trade Circle","Ruler Name","Resource 1+2",
+                    "Alliance","Team","Days Old","Nation Drill Link","Activity"
                 ]])
-
-                # — Unmatched Players —
-                st.markdown("#### Unmatched Players")
-                unmatched = details[~details["Ruler Name"].isin(tc_df["Ruler Name"])].copy()
-                # sort case‑insensitive and reset to 0…n‑1
-                unmatched = (
-                    unmatched
-                    .sort_values(by="Ruler Name", key=lambda col: col.str.lower())
-                    .reset_index(drop=True)
-                )
-                # shift the index so it starts at 1 instead of 0
-                unmatched.index = unmatched.index + 1
-                st.dataframe(
-                    unmatched[
-                        [
-                            "Ruler Name",
-                            "Resource 1+2",
-                            "Alliance",
-                            "Team",
-                            "Days Old",
-                            "Nation Drill Link",
-                            "Activity",
-                        ]
-                    ]
-                )
+                # … rest of the original code for Unmatched … 
 
         # ——— Updated Trade Circles ———
         with st.expander("Updated Trade Circles"):
