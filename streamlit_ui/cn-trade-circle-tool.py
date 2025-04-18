@@ -637,11 +637,17 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             renumbered.append(row)
                     opt_df = pd.DataFrame(renumbered)
 
-                    # ── 2) Sort Ruler Names alphabetically within each circle
+                    # ── 2) Sort by Level, then by the new Circle number, then by Ruler Name (case‑insensitive)
                     level_order = {'Level A': 0, 'Level B': 1, 'Level C': 2}
                     opt_df = opt_df.sort_values(
                         ['Peace Mode Level', 'Trade Circle', 'Ruler Name'],
-                        key=lambda col: col.map(level_order) if col.name == 'Peace Mode Level' else col
+                        key=lambda col: (
+                            col.map(level_order)
+                            if col.name == 'Peace Mode Level' else
+                            col.str.lower()
+                            if col.name == 'Ruler Name' else
+                            col
+                        )
                     ).reset_index(drop=True)
                     opt_df.index += 1
 
