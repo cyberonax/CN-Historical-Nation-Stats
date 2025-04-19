@@ -452,31 +452,49 @@ def main():
                 .mean().reset_index().rename(columns={'Empty Slots Count': 'All Time Average Empty Trade Slots'})
             st.markdown("#### All Time Average Empty Trade Slots by Alliance")
             st.dataframe(avg_empty_total)
-            # Month‑over‑Month Percentage of Previous Month
-            empty_month = empty_agg.copy()
-            empty_month['month'] = empty_month['date'].dt.to_period('M').dt.to_timestamp()
-            monthly_empty = (empty_month.sort_values('date')
-                             .groupby(['Alliance', 'month']).last()
-                             .reset_index()[['Alliance', 'month', 'Empty Slots Count']])
-            monthly_empty['prev'] = monthly_empty.groupby('Alliance')['Empty Slots Count'].shift(1)
-            monthly_empty['% of Prev Month'] = monthly_empty['Empty Slots Count'] / monthly_empty['prev'] * 100
-            pct_chart = alt.Chart(monthly_empty).mark_bar().encode(
-                x=alt.X('month:T', title='Month'),
-                y=alt.Y('% of Prev Month:Q', title='% of Previous Month'),
-                color=alt.Color('Alliance:N', legend=alt.Legend(title='Alliance')),
-                tooltip=['month:T', 'Alliance', alt.Tooltip('% of Prev Month:Q', format='.2f', title='% of Prev Month')],
-            ).properties(width=700, height=400)
-            st.altair_chart(pct_chart, use_container_width=True)
-            # Table tabs by year
-            years = sorted(monthly_empty['month'].dt.year.unique())
-            pct_tabs = st.tabs([str(y) for y in years])
-            for idx, year in enumerate(years):
-                with pct_tabs[idx]:
-                    year_df = (monthly_empty[monthly_empty['month'].dt.year == year]
-                               .rename(columns={'month': 'Month'})[['Alliance', 'Month', '% of Prev Month']]
-                               .sort_values(['Alliance', 'Month']))
-                    st.dataframe(year_df)
-        
+
+            # Daily % Change vs Previous Day, with Month/Year tabs
+            daily_empty = empty_agg.copy()
+            daily_empty['day'] = daily_empty['date'].dt.normalize()
+            daily_empty = (daily_empty.sort_values('date')
+                           .groupby(['Alliance','day']).last()
+                           .reset_index()[['Alliance','day','Empty Slots Count']])
+            daily_empty['prev'] = daily_empty.groupby('Alliance')['Empty Slots Count'].shift(1)
+            daily_empty['% of Prev Day'] = daily_empty['Empty Slots Count'] / daily_empty['prev'] * 100
+
+            period_tabs = st.tabs(["By Month", "By Year"])
+            # By Month
+            with period_tabs[0]:
+                daily_empty['month'] = daily_empty['day'].dt.to_period('M').dt.to_timestamp()
+                months = sorted(daily_empty['month'].unique())
+                month_tabs = st.tabs([m.strftime('%Y-%m') for m in months])
+                for i, m in enumerate(months):
+                    with month_tabs[i]:
+                        df_m = daily_empty[daily_empty['month'] == m]
+                        pct_chart = alt.Chart(df_m).mark_bar().encode(
+                            x=alt.X('day:T', title='Day'),
+                            y=alt.Y('% of Prev Day:Q', title='% of Previous Day'),
+                            color=alt.Color('Alliance:N', legend=alt.Legend(title='Alliance')),
+                            tooltip=['day:T', 'Alliance', alt.Tooltip('% of Prev Day:Q', format='.2f')],
+                        ).properties(width=700, height=400)
+                        st.altair_chart(pct_chart, use_container_width=True)
+                        st.dataframe(df_m[['Alliance','day','% of Prev Day']])
+            # By Year
+            with period_tabs[1]:
+                years = sorted(daily_empty['day'].dt.year.unique())
+                year_tabs = st.tabs([str(y) for y in years])
+                for i, y in enumerate(years):
+                    with year_tabs[i]:
+                        df_y = daily_empty[daily_empty['day'].dt.year == y]
+                        pct_chart = alt.Chart(df_y).mark_bar().encode(
+                            x=alt.X('day:T', title='Day'),
+                            y=alt.Y('% of Prev Day:Q', title='% of Previous Day'),
+                            color=alt.Color('Alliance:N', legend=alt.Legend(title='Alliance')),
+                            tooltip=['day:T', 'Alliance', alt.Tooltip('% of Prev Day:Q', format='.2f')],
+                        ).properties(width=700, height=400)
+                        st.altair_chart(pct_chart, use_container_width=True)
+                        st.dataframe(df_y[['Alliance','day','% of Prev Day']])
+
         # 4. % of Nations with Empty Trade Slots Over Time
         with st.expander("% of Nations with Empty Trade Slots Over Time"):
             total_nations = df_agg.groupby(['snapshot_date', 'Alliance']).agg(total_nations=('Nation ID', 'count')).reset_index()
