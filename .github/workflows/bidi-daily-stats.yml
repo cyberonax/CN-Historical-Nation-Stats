@@ -1,0 +1,28 @@
+name: Bi‑Daily Stats → Discord
+
+on:
+  schedule:
+    # run at 00:05 UTC and 12:05 UTC every day
+    - cron: '5 0 * * *'
+    - cron: '5 12 * * *'
+
+jobs:
+  compute-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🛎 Checkout code
+        uses: actions/checkout@v3
+
+      - name: 🔧 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install dependencies
+        run: pip install pandas matplotlib requests
+
+      - name: 📊 Compute, chart & edit Discord message
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python .github/scripts/compute_and_notify.py
