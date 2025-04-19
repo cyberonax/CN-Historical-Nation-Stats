@@ -436,7 +436,7 @@ def main():
         
         # 3. Total Empty Trade Slots by Alliance Over Time
         with st.expander("Total Empty Trade Slots by Alliance Over Time"):
-            # original line chart and tables
+            # original line chart and summary tables
             empty_agg = df_agg.groupby(['snapshot_date', 'Alliance'])['Empty Slots Count'].sum().reset_index()
             empty_agg['date'] = empty_agg['snapshot_date']
             pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
@@ -459,30 +459,34 @@ def main():
             pct_src['day'] = pct_src['date'].dt.normalize()
             pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
 
-            # daily % change
+            # daily % change (last snapshot each day)
             daily = pct_src.sort_values('date') \
                 .groupby(['Alliance', 'day']).last() \
                 .reset_index()[['Alliance', 'day', 'Empty Slots Count']]
-            daily['pct_change'] = (daily['Empty Slots Count'] / daily.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
+            daily['pct_change'] = (daily['Empty Slots Count'] / 
+                                   daily.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
 
-            # monthly % change
+            # monthly % change (last snapshot each month)
             monthly = pct_src.sort_values('date') \
                 .groupby(['Alliance', 'month']).last() \
                 .reset_index()[['Alliance', 'month', 'Empty Slots Count']]
-            monthly['pct_change'] = (monthly['Empty Slots Count'] / monthly.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
+            monthly['pct_change'] = (monthly['Empty Slots Count'] / 
+                                     monthly.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
 
             # toggle daily vs monthly
             freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="empty_pct_freq")
             if freq == "Daily":
                 year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="empty_daily_year")
-                df_year = daily[daily['day'].dt.year == year]
-                pivot = df_year.pivot(index='Alliance', columns=df_year['day'].dt.strftime('%m-%d'), values='pct_change')
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
                 st.markdown(f"#### Daily % Change of Empty Trade Slots — {year}")
                 st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
             else:
                 year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="empty_monthly_year")
-                df_year = monthly[monthly['month'].dt.year == year]
-                pivot = df_year.pivot(index='Alliance', columns=df_year['month'].dt.strftime('%b'), values='pct_change')
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
                 st.markdown(f"#### Monthly % Change of Empty Trade Slots — {year}")
                 st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
 
