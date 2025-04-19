@@ -698,16 +698,18 @@ def main():
                         df_indiv.dropna(subset=['activity_score']),"activity_score","Activity Score (Days)",show_ruler_on_hover=show_hover
                     ),use_container_width=True
                 )
-                # Compute each nation's average inactivity
-                avg_activity = df_indiv.dropna(subset=['activity_score']).groupby(["Nation ID","Ruler Name"]).agg(
-                    All_Time_Avg_Inactivity=("activity_score","mean")
-                ).reset_index()
-                # Add current activity score
-                latest_act = df_indiv.sort_values("date").drop_duplicates(["Nation ID","Ruler Name"], keep="last")[['Ruler Name','activity_score']]
-                latest_act.rename(columns={'activity_score':'Current Activity Score'},inplace=True)
+                # Compute each nation's average days of inactivity
+                avg_activity = df_indiv.dropna(subset=['activity_score']) \
+                    .groupby(["Nation ID","Ruler Name"])['activity_score'] \
+                    .mean() \
+                    .reset_index(name="All Time Average Days of Inactivity")
+                # Add current activity
+                latest_act = df_indiv.sort_values("date") \
+                    .drop_duplicates(["Nation ID","Ruler Name"], keep="last")[['Ruler Name','activity_score']]
+                latest_act.rename(columns={'activity_score':'Current Activity'},inplace=True)
                 avg_activity = avg_activity.merge(latest_act,on='Ruler Name').drop(columns=["Nation ID"])
-                st.markdown("#### All Time Average Daily Inactivity per Nation")
-                st.dataframe(avg_activity[['Ruler Name','Current Activity Score','All_Time_Avg_Inactivity']])
+                st.markdown("#### All Time Average Days of Inactivity per Nation")
+                st.dataframe(avg_activity[['Ruler Name','Current Activity','All Time Average Days of Inactivity']])
     
         # (b) Empty Trade Slots Over Time
         with st.expander("Empty Trade Slots Over Time"):
