@@ -1,14 +1,18 @@
 name: Bi‑Daily Stats → Discord
 
 on:
+  # 1) Manual trigger via “Run workflow” button
+  workflow_dispatch:
+
+  # 2) Scheduled triggers at 00:05 and 12:05 UTC
   schedule:
-    # run at 00:05 UTC and 12:05 UTC every day
     - cron: '5 0 * * *'
     - cron: '5 12 * * *'
 
 jobs:
   compute-and-notify:
     runs-on: ubuntu-latest
+
     steps:
       - name: 🛎 Checkout code
         uses: actions/checkout@v3
