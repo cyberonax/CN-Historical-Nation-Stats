@@ -906,93 +906,106 @@ def main():
         st.markdown("This tool calculates the all-time average inactivity (activity score) for each nation by matching the provided nation or ruler names.")
         names_input = st.text_area("Enter nation or ruler names (one per line)", height=100)
         
-        if st.button("Search", key="inactivity_tracker_search"):
-            if not names_input.strip():
-                st.info("No names entered. Please paste one or more names.")
-            else:
-                st.markdown("### Summary of Activity")
-                st.markdown(
-                    """
-                    The table below organizes the inactivity details for each name you entered. 
-                    It respects your original grouping by preserving blank lines as separators.
-                    """
-                )
-                raw_lines = names_input.splitlines()
-                alt_rows = []
-                for line in raw_lines:
-                    if line.strip() == "":
-                        # Preserve blank row.
-                        alt_rows.append({
-                            "Ruler Name": "",
-                            "Resource 1+2": "",
-                            "Alliance": "",
-                            "Team": "",
-                            "Days Old": "",
-                            "Nation Drill Link": "",
-                            "Activity": ""
-                        })
-                        continue
-                    lookup_name = line.strip()
-                    temp_df = st.session_state.df.copy()
-                    # Fill missing values for consistency.
-                    temp_df["Alliance"] = temp_df["Alliance"].fillna("None")
-                    temp_df["Ruler Name"] = temp_df["Ruler Name"].fillna("None")
-                    mask = temp_df["Ruler Name"].str.lower() == lookup_name.lower()
-                    if not mask.any():
-                        mask = temp_df["Nation Name"].str.lower() == lookup_name.lower()
-                    if mask.any():
-                        # Retrieve all snapshots for the matched nation.
-                        row = temp_df[mask].iloc[0]
-                        nation_snapshots = temp_df[temp_df["Nation ID"] == row["Nation ID"]]
-                        # Use the latest snapshot for Alliance, Team, and Resource 1+2.
-                        if not nation_snapshots.empty:
-                            latest_idx = nation_snapshots["date"].idxmax()
-                            latest_row = nation_snapshots.loc[latest_idx]
-                            alliance = latest_row["Alliance"]
-                            if alliance == "None":
-                                alliance = ""
-                            team = latest_row["Team"]
-                            if team == "None":
-                                team = ""
-                            res = get_resource_1_2(latest_row)
-                            created_dt = pd.to_datetime(latest_row["Created"], errors='coerce')
-                            days_old = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
-                        else:
-                            # Fallback to the originally matched row if snapshots are missing.
-                            alliance = row["Alliance"] if row["Alliance"] != "None" else ""
-                            team = row["Team"] if row["Team"] != "None" else ""
-                            res = get_resource_1_2(row)
-                            created_dt = pd.to_datetime(row["Created"], errors='coerce')
-                            days_old = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
-                        ruler = row["Ruler Name"]
-                        nation_drill = "https://www.cybernations.net/nation_drill_display.asp?Nation_ID=" + str(row["Nation ID"])
-                        # Compute the average activity score for all snapshots of this nation.
-                        nation_snapshots_activity = temp_df[temp_df["Nation ID"] == row["Nation ID"]].dropna(subset=["activity_score"])
-                        activity_val = round(nation_snapshots_activity["activity_score"].mean(), 2) if not nation_snapshots_activity.empty else ""
-                        alt_rows.append({
-                            "Ruler Name": ruler,
-                            "Resource 1+2": res,
-                            "Alliance": alliance,
-                            "Team": team,
-                            "Days Old": days_old,
-                            "Nation Drill Link": nation_drill,
-                            "Activity": activity_val
-                        })
+with tabs[2]:
+    st.header("Inactivity Tracker")
+    st.markdown(
+        "This tool calculates the all-time average inactivity (activity score) "
+        "for each nation by matching the provided nation or ruler names."
+    )
+    names_input = st.text_area("Enter nation or ruler names (one per line)", height=100)
+    
+    if st.button("Search", key="inactivity_tracker_search"):
+        if not names_input.strip():
+            st.info("No names entered. Please paste one or more names.")
+        else:
+            st.markdown("### Summary of Activity")
+            st.markdown(
+                """
+                The table below organizes the inactivity details for each name you entered. 
+                It respects your original grouping by preserving blank lines as separators.
+                """
+            )
+            raw_lines = names_input.splitlines()
+            alt_rows = []
+            
+            # —— apply alliance filter once, up front —— 
+            temp_df = st.session_state.df.copy()
+            temp_df = temp_df[temp_df["Alliance"] == st.session_state["nation"]]
+            temp_df["Alliance"] = temp_df["Alliance"].fillna("None")
+            temp_df["Ruler Name"] = temp_df["Ruler Name"].fillna("None")
+            
+            for line in raw_lines:
+                if line.strip() == "":
+                    # Preserve blank row.
+                    alt_rows.append({
+                        "Ruler Name": "",
+                        "Resource 1+2": "",
+                        "Alliance": "",
+                        "Team": "",
+                        "Days Old": "",
+                        "Nation Drill Link": "",
+                        "Activity": ""
+                    })
+                    continue
+
+                lookup_name = line.strip()
+                mask = temp_df["Ruler Name"].str.lower() == lookup_name.lower()
+                if not mask.any():
+                    mask = temp_df["Nation Name"].str.lower() == lookup_name.lower()
+
+                if mask.any():
+                    # Retrieve all snapshots for the matched nation.
+                    row = temp_df[mask].iloc[0]
+                    nation_snapshots = temp_df[temp_df["Nation ID"] == row["Nation ID"]]
+                    # Use the latest snapshot for Alliance, Team, and Resource 1+2.
+                    if not nation_snapshots.empty:
+                        latest_idx = nation_snapshots["date"].idxmax()
+                        latest_row = nation_snapshots.loc[latest_idx]
+                        alliance = latest_row["Alliance"] or ""
+                        team     = latest_row["Team"] or ""
+                        res      = get_resource_1_2(latest_row)
+                        created_dt = pd.to_datetime(latest_row["Created"], errors='coerce')
+                        days_old  = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
                     else:
-                        # For unrecognized names, repeat the input text in every column.
-                        alt_rows.append({
-                            "Ruler Name": lookup_name,
-                            "Resource 1+2": lookup_name,
-                            "Alliance": lookup_name,
-                            "Team": lookup_name,
-                            "Days Old": lookup_name,
-                            "Nation Drill Link": lookup_name,
-                            "Activity": lookup_name
-                        })
-                alt_df = pd.DataFrame(
-                    alt_rows,
-                    columns=["Ruler Name", "Resource 1+2", "Alliance", "Team", "Days Old", "Nation Drill Link", "Activity"]
-                )
+                        # Fallback to the originally matched row if snapshots are missing.
+                        alliance   = row["Alliance"] or ""
+                        team       = row["Team"] or ""
+                        res        = get_resource_1_2(row)
+                        created_dt = pd.to_datetime(row["Created"], errors='coerce')
+                        days_old   = (pd.Timestamp.now() - created_dt).days if pd.notnull(created_dt) else ""
+
+                    ruler        = row["Ruler Name"]
+                    nation_drill = f"https://www.cybernations.net/nation_drill_display.asp?Nation_ID={row['Nation ID']}"
+                    # Compute the average activity score for all snapshots of this nation.
+                    nation_snapshots_activity = nation_snapshots.dropna(subset=["activity_score"])
+                    activity_val = (
+                        round(nation_snapshots_activity["activity_score"].mean(), 2)
+                        if not nation_snapshots_activity.empty else ""
+                    )
+
+                    alt_rows.append({
+                        "Ruler Name":       ruler,
+                        "Resource 1+2":     res,
+                        "Alliance":         alliance,
+                        "Team":             team,
+                        "Days Old":         days_old,
+                        "Nation Drill Link": nation_drill,
+                        "Activity":         activity_val
+                    })
+                else:
+                    # For unrecognized names, repeat the input text in every column.
+                    alt_rows.append({col: lookup_name for col in [
+                        "Ruler Name", "Resource 1+2", "Alliance",
+                        "Team", "Days Old", "Nation Drill Link", "Activity"
+                    ]})
+
+            alt_df = pd.DataFrame(
+                alt_rows,
+                columns=[
+                    "Ruler Name", "Resource 1+2", "Alliance",
+                    "Team", "Days Old", "Nation Drill Link", "Activity"
+                ]
+            )
                 
                 # Convert the alternative table to tab-separated text for copying.
                 alt_table_text = alt_df.to_csv(sep="\t", index=False)
