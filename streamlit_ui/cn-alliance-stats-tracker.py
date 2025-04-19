@@ -955,7 +955,7 @@ def main():
 
     # Download All Data to Excel button
     # ─────────────────────────────────────
-    if st.button("Prepare All Data for Export"):
+    if st.sidebar.button("Prepare All Data for Export"):
         # Prepare in-memory output
         output = io.BytesIO()
         
@@ -986,7 +986,7 @@ def main():
         file_name = f"cybernations_timeline_stats_data_{date_str}.xlsx"
 
         # Provide download button
-        st.download_button(
+        st.sidebar.download_button(
             label="Download",
             data=output.getvalue(),
             file_name=file_name,
