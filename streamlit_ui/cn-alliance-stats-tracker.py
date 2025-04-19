@@ -436,47 +436,55 @@ def main():
         
         # 3. Total Empty Trade Slots by Alliance Over Time
         with st.expander("Total Empty Trade Slots by Alliance Over Time"):
+            # original line chart and tables
             empty_agg = df_agg.groupby(['snapshot_date', 'Alliance'])['Empty Slots Count'].sum().reset_index()
             empty_agg['date'] = empty_agg['snapshot_date']
             pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
             chart = altair_line_chart_from_pivot(pivot_empty_total, "Empty Slots Count", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
 
-            # Current and average tables
             current_empty_total = empty_agg.sort_values('date') \
-                .groupby('Alliance').last().reset_index()[['Alliance','Empty Slots Count']] \
-                .rename(columns={'Empty Slots Count':'Current Total Empty Trade Slots'})
+                .groupby('Alliance').last().reset_index()[['Alliance', 'Empty Slots Count']] \
+                .rename(columns={'Empty Slots Count': 'Current Total Empty Trade Slots'})
             st.markdown("#### Current Total Empty Trade Slots by Alliance")
             st.dataframe(current_empty_total)
+
             avg_empty_total = empty_agg.groupby('Alliance')['Empty Slots Count'] \
-                .mean().reset_index().rename(columns={'Empty Slots Count':'All Time Average Empty Trade Slots'})
+                .mean().reset_index().rename(columns={'Empty Slots Count': 'All Time Average Empty Trade Slots'})
             st.markdown("#### All Time Average Empty Trade Slots by Alliance")
             st.dataframe(avg_empty_total)
 
-            # Toggle daily vs monthly percent change
-            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="empty_pct_freq")
+            # prepare percent‑change series
             pct_src = empty_agg.copy()
-            pct_src['day']   = pct_src['date'].dt.normalize()
+            pct_src['day'] = pct_src['date'].dt.normalize()
             pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
 
-            # daily pct change
-            daily = (pct_src.sort_values('date')
-                          .groupby(['Alliance','day']).last()
-                          .reset_index()[['Alliance','day','Empty Slots Count']])
-            daily['pct_change'] = (daily['Empty Slots Count']/daily.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
+            # daily % change
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance', 'day']).last() \
+                .reset_index()[['Alliance', 'day', 'Empty Slots Count']]
+            daily['pct_change'] = (daily['Empty Slots Count'] / daily.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
 
-            # monthly pct change (using last snapshot of month)
-            monthly = (pct_src.sort_values('date')
-                            .groupby(['Alliance','month']).last()
-                            .reset_index()[['Alliance','month','Empty Slots Count']])
-            monthly['pct_change'] = (monthly['Empty Slots Count']/monthly.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
+            # monthly % change
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance', 'month']).last() \
+                .reset_index()[['Alliance', 'month', 'Empty Slots Count']]
+            monthly['pct_change'] = (monthly['Empty Slots Count'] / monthly.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
 
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="empty_pct_freq")
             if freq == "Daily":
-                st.markdown("#### Daily % Change of Empty Trade Slots")
-                st.dataframe(daily.rename(columns={'day':'Date','pct_change':'% Change'}))
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="empty_daily_year")
+                df_year = daily[daily['day'].dt.year == year]
+                pivot = df_year.pivot(index='Alliance', columns=df_year['day'].dt.strftime('%m-%d'), values='pct_change')
+                st.markdown(f"#### Daily % Change of Empty Trade Slots — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
             else:
-                st.markdown("#### Monthly % Change of Empty Trade Slots")
-                st.dataframe(monthly.rename(columns={'month':'Month','pct_change':'% Change'}))
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="empty_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year]
+                pivot = df_year.pivot(index='Alliance', columns=df_year['month'].dt.strftime('%b'), values='pct_change')
+                st.markdown(f"#### Monthly % Change of Empty Trade Slots — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
 
         # 4. % of Nations with Empty Trade Slots Over Time
         with st.expander("% of Nations with Empty Trade Slots Over Time"):
