@@ -815,18 +815,15 @@ def main():
                 st.markdown("#### Defensive Casualties Growth Per Day")
                 st.dataframe(defense_growth_df[['Ruler Name','Current Defensive Casualties','Defensive Casualties Growth Per Day']])
 
-        # (i) Nations That Have Left the Alliance
-        # Identify nations previously in the alliance but not in the current valid set
-        history = df_raw[df_raw["Alliance"] == selected_alliance_ind]
-        left = (
-            history.groupby(["Nation ID","Ruler Name"])['date']
-            .max()
-            .reset_index(name='Date of Leaving')
-        )
-        left = left[~left['Nation ID'].isin(valid_nations)]
-        left = left[['Ruler Name','Date of Leaving']].sort_values('Date of Leaving', ascending=False)
-        st.markdown("#### Nations That Have Left the Alliance")
-        st.dataframe(left)
+        # (i) Nations That Left Alliance
+        with st.expander("Nations That Left Alliance"):
+            alliance_hist = df_raw[df_raw["Alliance"] == selected_alliance_ind]
+            latest_date = alliance_hist["date"].max()
+            current_ids = set(alliance_hist[alliance_hist["date"] == latest_date]["Nation ID"])
+            last_seen = alliance_hist.groupby(["Nation ID","Ruler Name"])["date"].max().reset_index()
+            left_df = last_seen[~last_seen["Nation ID"].isin(current_ids)].rename(columns={"date":"Date of Leaving"})
+            st.dataframe(left_df[["Ruler Name","Date of Leaving"]])
+
 
     ####################################################
     # TAB 3: Inactivity Tracker
