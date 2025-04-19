@@ -558,7 +558,6 @@ def main():
                 pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
                 st.markdown(f"#### Monthly % Change of Technology — {year}")
                 st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
-
         
         # 6. Average Technology by Alliance Over Time
         with st.expander("Average Technology by Alliance Over Time"):
