@@ -153,7 +153,7 @@ def main():
     majority_team    = latest_snapshot['Team'].mode().iloc[0]
 
     include_pending = st.checkbox(
-        "Include Pending Alliance Members in inactivity chart",
+        "Include Pending Status Nations",
         value=False
     )
 
