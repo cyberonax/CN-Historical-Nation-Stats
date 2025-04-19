@@ -152,11 +152,21 @@ def main():
     latest_snapshot  = df_all[df_all['date'] == latest_date]
     majority_team    = latest_snapshot['Team'].mode().iloc[0]
 
+    include_pending = st.checkbox(
+        "Include Pending Alliance Members in inactivity chart",
+        value=False
+    )
+
     # Filter current members by non-pending & majority team
-    current_snapshot_filtered = latest_snapshot[
-        (latest_snapshot['Alliance Status'] != "Pending") &
-        (latest_snapshot['Team'] == majority_team)
-    ].copy()
+    if include_pending:
+        current_snapshot_filtered = latest_snapshot[
+            (latest_snapshot['Team'] == majority_team)
+        ].copy()
+    else:
+        current_snapshot_filtered = latest_snapshot[
+            (latest_snapshot['Alliance Status'] != "Pending") &
+            (latest_snapshot['Team'] == majority_team)
+        ].copy()
     current_rulers = set(current_snapshot_filtered['Ruler Name'])
 
     # Build history for those current rulers
