@@ -441,59 +441,42 @@ def main():
             pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
             chart = altair_line_chart_from_pivot(pivot_empty_total, "Empty Slots Count", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
-            # Current Total Empty Trade Slots
+
+            # Current and average tables
             current_empty_total = empty_agg.sort_values('date') \
-                .groupby('Alliance').last().reset_index()[['Alliance', 'Empty Slots Count']] \
-                .rename(columns={'Empty Slots Count': 'Current Total Empty Trade Slots'})
+                .groupby('Alliance').last().reset_index()[['Alliance','Empty Slots Count']] \
+                .rename(columns={'Empty Slots Count':'Current Total Empty Trade Slots'})
             st.markdown("#### Current Total Empty Trade Slots by Alliance")
             st.dataframe(current_empty_total)
-            # All Time Average Empty Trade Slots
             avg_empty_total = empty_agg.groupby('Alliance')['Empty Slots Count'] \
-                .mean().reset_index().rename(columns={'Empty Slots Count': 'All Time Average Empty Trade Slots'})
+                .mean().reset_index().rename(columns={'Empty Slots Count':'All Time Average Empty Trade Slots'})
             st.markdown("#### All Time Average Empty Trade Slots by Alliance")
             st.dataframe(avg_empty_total)
 
-            # Daily % Change vs Previous Day, with Month/Year tabs
-            daily_empty = empty_agg.copy()
-            daily_empty['day'] = daily_empty['date'].dt.normalize()
-            daily_empty = (daily_empty.sort_values('date')
-                           .groupby(['Alliance','day']).last()
-                           .reset_index()[['Alliance','day','Empty Slots Count']])
-            daily_empty['prev'] = daily_empty.groupby('Alliance')['Empty Slots Count'].shift(1)
-            daily_empty['% of Prev Day'] = daily_empty['Empty Slots Count'] / daily_empty['prev'] * 100
+            # Toggle daily vs monthly percent change
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="empty_pct_freq")
+            pct_src = empty_agg.copy()
+            pct_src['day']   = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
 
-            period_tabs = st.tabs(["By Month", "By Year"])
-            # By Month
-            with period_tabs[0]:
-                daily_empty['month'] = daily_empty['day'].dt.to_period('M').dt.to_timestamp()
-                months = sorted(daily_empty['month'].unique())
-                month_tabs = st.tabs([m.strftime('%Y-%m') for m in months])
-                for i, m in enumerate(months):
-                    with month_tabs[i]:
-                        df_m = daily_empty[daily_empty['month'] == m]
-                        pct_chart = alt.Chart(df_m).mark_bar().encode(
-                            x=alt.X('day:T', title='Day'),
-                            y=alt.Y('% of Prev Day:Q', title='% of Previous Day'),
-                            color=alt.Color('Alliance:N', legend=alt.Legend(title='Alliance')),
-                            tooltip=['day:T', 'Alliance', alt.Tooltip('% of Prev Day:Q', format='.2f')],
-                        ).properties(width=700, height=400)
-                        st.altair_chart(pct_chart, use_container_width=True)
-                        st.dataframe(df_m[['Alliance','day','% of Prev Day']])
-            # By Year
-            with period_tabs[1]:
-                years = sorted(daily_empty['day'].dt.year.unique())
-                year_tabs = st.tabs([str(y) for y in years])
-                for i, y in enumerate(years):
-                    with year_tabs[i]:
-                        df_y = daily_empty[daily_empty['day'].dt.year == y]
-                        pct_chart = alt.Chart(df_y).mark_bar().encode(
-                            x=alt.X('day:T', title='Day'),
-                            y=alt.Y('% of Prev Day:Q', title='% of Previous Day'),
-                            color=alt.Color('Alliance:N', legend=alt.Legend(title='Alliance')),
-                            tooltip=['day:T', 'Alliance', alt.Tooltip('% of Prev Day:Q', format='.2f')],
-                        ).properties(width=700, height=400)
-                        st.altair_chart(pct_chart, use_container_width=True)
-                        st.dataframe(df_y[['Alliance','day','% of Prev Day']])
+            # daily pct change
+            daily = (pct_src.sort_values('date')
+                          .groupby(['Alliance','day']).last()
+                          .reset_index()[['Alliance','day','Empty Slots Count']])
+            daily['pct_change'] = (daily['Empty Slots Count']/daily.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
+
+            # monthly pct change (using last snapshot of month)
+            monthly = (pct_src.sort_values('date')
+                            .groupby(['Alliance','month']).last()
+                            .reset_index()[['Alliance','month','Empty Slots Count']])
+            monthly['pct_change'] = (monthly['Empty Slots Count']/monthly.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
+
+            if freq == "Daily":
+                st.markdown("#### Daily % Change of Empty Trade Slots")
+                st.dataframe(daily.rename(columns={'day':'Date','pct_change':'% Change'}))
+            else:
+                st.markdown("#### Monthly % Change of Empty Trade Slots")
+                st.dataframe(monthly.rename(columns={'month':'Month','pct_change':'% Change'}))
 
         # 4. % of Nations with Empty Trade Slots Over Time
         with st.expander("% of Nations with Empty Trade Slots Over Time"):
