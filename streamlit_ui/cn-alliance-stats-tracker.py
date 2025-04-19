@@ -814,7 +814,20 @@ def main():
                 defense_growth_df = defense_growth_df.sort_values("Defensive Casualties Growth Per Day",ascending=False).reset_index(drop=True)
                 st.markdown("#### Defensive Casualties Growth Per Day")
                 st.dataframe(defense_growth_df[['Ruler Name','Current Defensive Casualties','Defensive Casualties Growth Per Day']])
-    
+
+        # (i) Nations That Have Left the Alliance
+        # Identify nations previously in the alliance but not in the current valid set
+        history = df_raw[df_raw["Alliance"] == selected_alliance_ind]
+        left = (
+            history.groupby(["Nation ID","Ruler Name"])['date']
+            .max()
+            .reset_index(name='Date of Leaving')
+        )
+        left = left[~left['Nation ID'].isin(valid_nations)]
+        left = left[['Ruler Name','Date of Leaving']].sort_values('Date of Leaving', ascending=False)
+        st.markdown("#### Nations That Have Left the Alliance")
+        st.dataframe(left)
+
     ####################################################
     # TAB 3: Inactivity Tracker
     ####################################################
