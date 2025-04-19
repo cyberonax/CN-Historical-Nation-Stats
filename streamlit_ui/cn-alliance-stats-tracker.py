@@ -664,224 +664,107 @@ def main():
         
         # Sidebar filter for individual nation metrics.
         st.sidebar.header("Nation Metrics")
-        # Before filtering by Alliance, fill missing values for the key columns.
         df_raw["Alliance"] = df_raw["Alliance"].fillna("None")
         df_raw["Ruler Name"] = df_raw["Ruler Name"].fillna("None")
-        
         alliances = sorted(df_raw['Alliance'].dropna().unique())
         default_ind = alliances.index("Freehold of The Wolves") if "Freehold of The Wolves" in alliances else 0
-        selected_alliance_ind = st.sidebar.selectbox("Select Alliance for Nation Metrics", options=alliances, index=default_ind, key="nation")
-        
-        # New sidebar multiselect widget to filter by Nation ID.
-        # Default selection is empty which means show all nations.
+        selected_alliance_ind = st.sidebar.selectbox("Select Alliance for Nation Metrics", alliances, default_ind, key="nation")
         nation_ids = sorted(df_raw["Nation ID"].dropna().unique())
-        selected_nation_ids = st.sidebar.multiselect("Filter by Nation ID", options=nation_ids, default=[], key="filter_nation_id")
+        selected_nation_ids = st.sidebar.multiselect("Filter by Nation ID", nation_ids, [], key="filter_nation_id")
+        ruler_names = [n.strip() for n in st.sidebar.text_area("Filter by Ruler Names (one per line)", "", key="filter_ruler_names").splitlines() if n.strip()]
+        show_hover = st.sidebar.checkbox("Display Ruler Name on hover", True, key="hover_option")
         
-        # Sidebar textbox for filtering by a list of Ruler Names (one per line).
-        ruler_names_raw = st.sidebar.text_area("Filter by Ruler Names (one per line)", value="", key="filter_ruler_names")
-        ruler_names = [name.strip() for name in ruler_names_raw.splitlines() if name.strip()]
-        
-        # "Display Ruler Name on hover" checkbox placed below the textbox.
-        show_hover = st.sidebar.checkbox("Display Ruler Name on hover", value=True, key="hover_option")
-        
-        # --- Determine valid Nation IDs based on the latest snapshot ---
-        # First, create a candidate subset using Alliance, Nation ID, and Ruler Name filters.
-        candidate = df_raw[df_raw["Alliance"] == selected_alliance_ind].copy()
-        if selected_nation_ids:
-            candidate = candidate[candidate["Nation ID"].isin(selected_nation_ids)]
-        if ruler_names:
-            candidate = candidate[candidate["Ruler Name"].isin(ruler_names)]
-        
-        # Use a date range selector (only for identifying valid nations)
+        # Determine valid nations
+        candidate = df_raw[df_raw["Alliance"]==selected_alliance_ind]
+        if selected_nation_ids: candidate = candidate[candidate["Nation ID"].isin(selected_nation_ids)]
+        if ruler_names:         candidate = candidate[candidate["Ruler Name"].isin(ruler_names)]
         if candidate.empty:
-            min_date_candidate = datetime.today().date()
-            max_date_candidate = datetime.today().date()
+            min_date_candidate = max_date_candidate = datetime.today().date()
         else:
             min_date_candidate = candidate['date'].min().date()
             max_date_candidate = candidate['date'].max().date()
-        date_range_candidate = st.sidebar.date_input("Select date range for Nation Metrics", [min_date_candidate, max_date_candidate], key="nation_date_range")
-        if isinstance(date_range_candidate, list) and len(date_range_candidate) == 2:
-            start_date_candidate, end_date_candidate = date_range_candidate
-            candidate_filtered = candidate[(candidate['date'] >= pd.Timestamp(start_date_candidate)) & (candidate['date'] <= pd.Timestamp(end_date_candidate))]
-        else:
-            candidate_filtered = candidate
-
-        # From the candidate filtered subset, only keep nations that appear in its latest snapshot.
-        if not candidate_filtered.empty:
-            latest_date = candidate_filtered['date'].max()
-            valid_nations = set(candidate_filtered[candidate_filtered['date'] == latest_date]["Nation ID"])
-        else:
-            valid_nations = set()
-
-        # Now, build the final df_indiv: use all snapshots (for all dates) of those valid nations in the selected alliance.
-        df_indiv = df_raw[(df_raw["Alliance"] == selected_alliance_ind) & (df_raw["Nation ID"].isin(valid_nations))].copy()
+        dr = st.sidebar.date_input("Select date range for Nation Metrics", [min_date_candidate, max_date_candidate], key="nation_date_range")
+        candidate_filtered = candidate[(candidate['date']>=pd.Timestamp(dr[0]))&(candidate['date']<=pd.Timestamp(dr[1]))] if isinstance(dr, list) else candidate
+        valid_nations = set(candidate_filtered[candidate_filtered['date']==candidate_filtered['date'].max()]["Nation ID"]) if not candidate_filtered.empty else set()
+        
+        df_indiv = df_raw[(df_raw["Alliance"]==selected_alliance_ind)&(df_raw["Nation ID"].isin(valid_nations))].copy()
+        
+        # compute each nation's current snapshot metrics
+        latest = (df_indiv.sort_values("date")
+                  .groupby(["Nation ID","Ruler Name"]).last().reset_index()
+                  [["Ruler Name","Technology","Infrastructure","Base Land","Strength","Attacking Casualties","Defensive Casualties"]]
+                  .rename(columns={
+                     "Technology":"Current Technology",
+                     "Infrastructure":"Current Infrastructure",
+                     "Base Land":"Current Base Land",
+                     "Strength":"Current Strength",
+                     "Attacking Casualties":"Current Attacking Casualties",
+                     "Defensive Casualties":"Current Defensive Casualties"
+                  }))
         
         with st.expander("Show Raw Nation Data"):
             st.dataframe(df_indiv)
-        
         st.markdown(f"### Charts for Alliance: {selected_alliance_ind}")
         
-        # (a) Nation Activity Distribution Over Time (if available)
+        # (a) Nation Inactivity Over Time
         if 'activity_score' in df_indiv.columns:
             with st.expander("Nation Inactivity Over Time (Days)"):
-                chart = altair_individual_metric_chart(df_indiv.dropna(subset=['activity_score']), "activity_score", "Activity Score (Days)", show_ruler_on_hover=show_hover)
-                st.altair_chart(chart, use_container_width=True)
+                st.altair_chart(
+                    altair_individual_metric_chart(
+                        df_indiv.dropna(subset=['activity_score']), "activity_score", "Activity Score (Days)", show_ruler_on_hover=show_hover
+                    ), use_container_width=True)
                 st.caption("Lower scores indicate more recent activity.")
-                
-                # Compute each nation's average activity score across snapshots.
-                avg_activity = (
-                    df_indiv
-                    .dropna(subset=["activity_score"])
-                    .groupby(["Nation ID", "Ruler Name"])["activity_score"]
-                    .mean()
-                    .sort_values(ascending=False)               # ← no "by=", just descending
-                    .reset_index()                              # now turns it into a DataFrame
-                    .rename(columns={"activity_score": "All Time Average Days of Inactivity"})
-                )
+                avg_activity = (df_indiv.dropna(subset=["activity_score"])
+                    .groupby(["Nation ID","Ruler Name"])["activity_score"].mean()
+                    .reset_index(name="All Time Average Days of Inactivity"))
+                # merge in current metrics & drop Nation ID
+                avg_activity = (avg_activity.merge(latest, on="Ruler Name", how="left")
+                    .drop(columns="Nation ID")
+                    [["Ruler Name"] + list(latest.columns[1:]) + ["All Time Average Days of Inactivity"]])
                 st.markdown("#### All Time Average Daily Inactivity per Nation")
                 st.dataframe(avg_activity)
         
-        # (b) Empty Trade Slots Over Time
+        # (b) Empty Trade Slots & Ratio
         with st.expander("Empty Trade Slots Over Time"):
-            chart = altair_individual_metric_chart(
-                df_indiv.dropna(subset=['Empty Slots Count']),
-                "Empty Slots Count",
-                "Empty Trade Slots",
-                show_ruler_on_hover=show_hover
-            )
-            st.altair_chart(chart, use_container_width=True)
-            
-            # Compute each nation's average empty trade slots across snapshots.
-            avg_empty = (
-                df_indiv.dropna(subset=['Empty Slots Count'])
-                .groupby(["Nation ID", "Ruler Name"])["Empty Slots Count"]
-                .mean()
-                .sort_values(ascending=False)
-                .reset_index()
-                .rename(columns={"Empty Slots Count": "All Time Average Empty Trade Slots"})
-            )
-            st.markdown("#### All Time Average Empty Trade Slots per Nation")
-            st.dataframe(avg_empty)
-            
-            # Compute each nation's average activity score (inactivity).
-            avg_inactivity = (
-                df_indiv.dropna(subset=['activity_score'])
-                .groupby(["Nation ID", "Ruler Name"])["activity_score"]
-                .mean()
-                .reset_index()
-                .rename(columns={"activity_score": "All Time Average Inactivity"})
-            )
-            
-            # Merge the two averages on Nation ID and Ruler Name.
-            avg_ratio = pd.merge(avg_empty, avg_inactivity, on=["Nation ID", "Ruler Name"], how="inner")
-            
-            # Compute the Empty-to-Inactivity Ratio.
-            # Replace 0 inactivity with None to avoid division by zero.
-            avg_ratio["Empty-to-Inactivity Ratio"] = avg_ratio["All Time Average Empty Trade Slots"] / avg_ratio["All Time Average Inactivity"].replace(0, None)
-            
+            st.altair_chart(
+                altair_individual_metric_chart(
+                    df_indiv.dropna(subset=['Empty Slots Count']), "Empty Slots Count", "Empty Trade Slots", show_ruler_on_hover=show_hover
+                ), use_container_width=True)
+            avg_empty = (df_indiv.dropna(subset=['Empty Slots Count'])
+                .groupby(["Nation ID","Ruler Name"])["Empty Slots Count"].mean()
+                .reset_index(name="All Time Average Empty Trade Slots"))
+            avg_inactivity = (df_indiv.dropna(subset=['activity_score'])
+                .groupby(["Nation ID","Ruler Name"])["activity_score"].mean()
+                .reset_index(name="All Time Average Inactivity"))
+            avg_ratio = pd.merge(avg_empty, avg_inactivity, on=["Nation ID","Ruler Name"])
+            avg_ratio["Empty-to-Inactivity Ratio"] = avg_ratio["All Time Average Empty Trade Slots"]/avg_ratio["All Time Average Inactivity"].replace(0,None)
+            # merge current metrics
+            avg_ratio = (avg_ratio.merge(latest, on="Ruler Name", how="left")
+                .drop(columns="Nation ID")
+                [["Ruler Name"] + list(latest.columns[1:]) + ["All Time Average Empty Trade Slots","All Time Average Inactivity","Empty-to-Inactivity Ratio"]])
             st.markdown("#### Empty Slots-to-Inactivity Ratio per Nation")
             st.caption("Higher values suggest higher priority for Trade Circle offers.")
             st.dataframe(avg_ratio.sort_values("Empty-to-Inactivity Ratio", ascending=False))
         
-        # (c) Technology Over Time
-        if 'Technology' in df_indiv.columns:
-            with st.expander("Technology Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Technology']),
-                    "Technology",
-                    "Technology",
-                    show_ruler_on_hover=show_hover
-                )
-                st.altair_chart(chart, use_container_width=True)
-                
-                # Display Technology Growth Per Day Table.
-                tech_growth_df = compute_growth(df_indiv.dropna(subset=['Technology']), "Technology")
-                tech_growth_df = tech_growth_df.sort_values("Technology Growth Per Day", ascending=False).reset_index(drop=True)
-                st.markdown("#### Technology Growth Per Day")
-                st.dataframe(tech_growth_df)
-        
-        # (d) Infrastructure Over Time
-        if 'Infrastructure' in df_indiv.columns:
-            with st.expander("Infrastructure Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Infrastructure']),
-                    "Infrastructure",
-                    "Infrastructure",
-                    show_ruler_on_hover=show_hover
-                )
-                st.altair_chart(chart, use_container_width=True)
-                
-                # Display Infrastructure Growth Per Day Table.
-                infra_growth_df = compute_growth(df_indiv.dropna(subset=['Infrastructure']), "Infrastructure")
-                infra_growth_df = infra_growth_df.sort_values("Infrastructure Growth Per Day", ascending=False).reset_index(drop=True)
-                st.markdown("#### Infrastructure Growth Per Day")
-                st.dataframe(infra_growth_df)
-        
-        # (e) Base Land Over Time
-        if 'Base Land' in df_indiv.columns:
-            with st.expander("Base Land Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Base Land']),
-                    "Base Land",
-                    "Base Land",
-                    show_ruler_on_hover=show_hover
-                )
-                st.altair_chart(chart, use_container_width=True)
-                
-                # Display Base Land Growth Per Day Table.
-                base_land_growth_df = compute_growth(df_indiv.dropna(subset=['Base Land']), "Base Land")
-                base_land_growth_df = base_land_growth_df.sort_values("Base Land Growth Per Day", ascending=False).reset_index(drop=True)
-                st.markdown("#### Base Land Growth Per Day")
-                st.dataframe(base_land_growth_df)
-        
-        # (f) Strength Over Time
-        if 'Strength' in df_indiv.columns:
-            with st.expander("Strength Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Strength']),
-                    "Strength",
-                    "Strength",
-                    show_ruler_on_hover=show_hover
-                )
-                st.altair_chart(chart, use_container_width=True)
-                
-                # Display Strength Growth Per Day Table.
-                strength_growth_df = compute_growth(df_indiv.dropna(subset=['Strength']), "Strength")
-                strength_growth_df = strength_growth_df.sort_values("Strength Growth Per Day", ascending=False).reset_index(drop=True)
-                st.markdown("#### Strength Growth Per Day")
-                st.dataframe(strength_growth_df)
-        
-        # (g) Attacking Casualties Over Time
-        if 'Attacking Casualties' in df_indiv.columns:
-            with st.expander("Attacking Casualties Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Attacking Casualties']),
-                    "Attacking Casualties",
-                    "Attacking Casualties",
-                    show_ruler_on_hover=show_hover
-                )
-                st.altair_chart(chart, use_container_width=True)
-                # Display Attacking Casualties Growth Per Day Table.
-                attack_growth_df = compute_growth(df_indiv.dropna(subset=['Attacking Casualties']), "Attacking Casualties")
-                attack_growth_df = attack_growth_df.sort_values("Attacking Casualties Growth Per Day", ascending=False).reset_index(drop=True)
-                st.markdown("#### Attacking Casualties Growth Per Day")
-                st.dataframe(attack_growth_df)
-        
-        # (h) Defensive Casualties Over Time
-        if 'Defensive Casualties' in df_indiv.columns:
-            with st.expander("Defensive Casualties Over Time"):
-                chart = altair_individual_metric_chart(
-                    df_indiv.dropna(subset=['Defensive Casualties']),
-                    "Defensive Casualties",
-                    "Defensive Casualties",
-                    show_ruler_on_hover=show_hover
-                )
-                st.altair_chart(chart, use_container_width=True)
-                # Display Defensive Casualties Growth Per Day Table.
-                defense_growth_df = compute_growth(df_indiv.dropna(subset=['Defensive Casualties']), "Defensive Casualties")
-                defense_growth_df = defense_growth_df.sort_values("Defensive Casualties Growth Per Day", ascending=False).reset_index(drop=True)
-                st.markdown("#### Defensive Casualties Growth Per Day")
-                st.dataframe(defense_growth_df)
+        # (c–h) Growth tables for Technology, Infrastructure, Base Land, Strength, Attacking & Defensive Casualties
+        for metric, title in [
+            ("Technology","Technology"),("Infrastructure","Infrastructure"),("Base Land","Base Land"),
+            ("Strength","Strength"),("Attacking Casualties","Attacking Casualties"),("Defensive Casualties","Defensive Casualties")
+        ]:
+            if metric in df_indiv.columns:
+                with st.expander(f"{title} Over Time"):
+                    st.altair_chart(
+                        altair_individual_metric_chart(
+                            df_indiv.dropna(subset=[metric]), metric, title, show_ruler_on_hover=show_hover
+                        ), use_container_width=True)
+                    growth_df = compute_growth(df_indiv.dropna(subset=[metric]), metric)
+                    growth_df = growth_df.sort_values(f"{metric} Growth Per Day", ascending=False).reset_index(drop=True)
+                    # merge current metrics & drop Nation ID
+                    growth_df = (growth_df.merge(latest, on="Ruler Name", how="left")
+                        .drop(columns="Nation ID")
+                        [["Ruler Name"] + list(latest.columns[1:]) + [f"{metric} Growth Per Day"]])
+                    st.markdown(f"#### {title} Growth Per Day")
+                    st.dataframe(growth_df)
     
     ####################################################
     # TAB 3: Inactivity Tracker
