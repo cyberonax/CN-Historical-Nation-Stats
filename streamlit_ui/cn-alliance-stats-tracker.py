@@ -438,17 +438,29 @@ def main():
         with st.expander("Total Empty Trade Slots by Alliance Over Time"):
             empty_agg = df_agg.groupby(['snapshot_date', 'Alliance'])['Empty Slots Count'].sum().reset_index()
             empty_agg['date'] = empty_agg['snapshot_date']
-            pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
-            chart = altair_line_chart_from_pivot(pivot_empty_total, "Empty Slots Count", selected_alliances, display_alliance_hover)
+            # Compute percent change month‑over‑month
+            empty_agg['month'] = empty_agg['date'].dt.to_period('M').dt.to_timestamp()
+            monthly_empty = empty_agg.groupby(['Alliance', 'month'])['Empty Slots Count'].sum().reset_index()
+            monthly_empty['pct_change'] = monthly_empty.groupby('Alliance')['Empty Slots Count'].pct_change() * 100
+            # Bar chart of percent change
+            chart = alt.Chart(monthly_empty).mark_bar().encode(
+                x=alt.X('month:T', title='Month'),
+                y=alt.Y('pct_change:Q', title='% Change from Previous Month'),
+                color=alt.Color('Alliance:N', legend=alt.Legend(title='Alliance')),
+                tooltip=['month:T', 'Alliance', alt.Tooltip('pct_change:Q', format='.2f', title='% Change')],
+            ).properties(width=700, height=400)
             st.altair_chart(chart, use_container_width=True)
-            # Current Total Empty Trade Slots
-            current_empty_total = empty_agg.sort_values('date').groupby('Alliance').last().reset_index()[['Alliance', 'Empty Slots Count']].rename(columns={'Empty Slots Count': 'Current Total Empty Trade Slots'})
-            st.markdown("#### Current Total Empty Trade Slots by Alliance")
-            st.dataframe(current_empty_total)
-            # All Time Average Empty Trade Slots
-            avg_empty_total = empty_agg.groupby('Alliance')['Empty Slots Count'].mean().reset_index().rename(columns={'Empty Slots Count': 'All Time Average Empty Trade Slots'})
-            st.markdown("#### All Time Average Empty Trade Slots by Alliance")
-            st.dataframe(avg_empty_total)
+            # Table tabs by year
+            years = sorted(monthly_empty['month'].dt.year.unique())
+            yearly_tabs = st.tabs([str(y) for y in years])
+            for idx, year in enumerate(years):
+                with yearly_tabs[idx]:
+                    year_df = (
+                        monthly_empty[monthly_empty['month'].dt.year == year]
+                        .rename(columns={'month': 'Month', 'pct_change': '% Change'})
+                        .sort_values(['Alliance', 'Month'])
+                    )
+                    st.dataframe(year_df)
         
         # 4. % of Nations with Empty Trade Slots Over Time
         with st.expander("% of Nations with Empty Trade Slots Over Time"):
