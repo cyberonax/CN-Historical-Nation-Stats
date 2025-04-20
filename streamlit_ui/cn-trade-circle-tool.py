@@ -413,6 +413,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 # … rest of the original code for Unmatched … 
 
         # ——— Updated Trade Circles ———
+        # ——— Updated Trade Circles ———
         with st.expander("Updated Trade Circles"):
             if 'tc_df' not in locals() or tc_df.empty:
                 st.markdown("_No Trade Circles to process. Please add entries in the Input Trade Circles section above._")
@@ -439,6 +440,11 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     lvl_base = pm_base[pm_base['Peace Mode Level'] == level].copy()
                     lvl_un   = pm_unmatched[pm_unmatched['Peace Mode Level'] == level].copy()
 
+                    # —— NEW: prioritize non‑pending players in the pool
+                    lvl_un = lvl_un.sort_values(
+                        by=(lvl_un['Alliance Status'] == "Pending")
+                    ).reset_index(drop=True)
+
                     # 1) identify incomplete circles
                     sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
                     incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
@@ -454,8 +460,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         lvl_base = lvl_base[~lvl_base['Trade Circle'].isin(dissolve_circles)].copy()
 
                     # 3) recompute incomplete on the remaining circles
-                    sizes      = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
+                    sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
                     incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
+
+                    # 4) fill the incomplete circles (fewest empty first), drawing from prioritized lvl_un
                     for circle_id, slots in sorted(incomplete.items(), key=lambda x: x[1]):
                         to_add = min(slots, len(lvl_un))
                         adds   = lvl_un.iloc[:to_add]
@@ -465,11 +473,11 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             rec['Trade Circle'] = circle_id
                             final_records.append(rec)
 
-                    # keep original full members
+                    # 5) keep original full members
                     for _, row in lvl_base.iterrows():
                         final_records.append(row.to_dict())
 
-                    # form brand-new full circles
+                    # 6) form brand‑new full circles of 6
                     max_id      = int(lvl_base['Trade Circle'].max()) if not lvl_base.empty else 0
                     next_circle = max_id + 1
                     while len(lvl_un) >= 6:
@@ -481,13 +489,13 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             final_records.append(rec)
                         next_circle += 1
 
-                    # assign any leftover (<6) into one final circle
+                    # 7) any remaining (<6) go into one last circle
                     if len(lvl_un) > 0:
                         for _, row in lvl_un.iterrows():
                             rec = row.to_dict()
                             rec['Trade Circle'] = next_circle
                             final_records.append(rec)
-                        lvl_un = lvl_un.iloc[0:0]  # clear
+                        lvl_un = lvl_un.iloc[0:0]
 
                 # assemble final_df
                 final_df = pd.DataFrame(final_records)
