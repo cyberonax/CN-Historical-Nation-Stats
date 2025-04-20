@@ -656,32 +656,12 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                      .drop_duplicates(subset=['Ruler Name']) \
                      .reset_index(drop=True)
                     
-                    # (b) find non‑pending leftovers & pending in opt_df
+                    # (b) if you need just the pending ones:
+                    pending_leftovers = leftovers[leftovers['Alliance Status']=='Pending'].copy()
+                    
+                    # (c) find non‑pending leftovers & pending in opt_df
                     non_pending = leftovers[leftovers['Alliance Status'] != 'Pending']
-                    pending_in_opt = opt_df[opt_df['Alliance Status'] == 'Pending']
-                    
-                    # (c) swap: for each non‑pending leftover, swap in the smallest‑activity pending ≥ theirs
-                    for _, lp in non_pending.iterrows():
-                        candidates = pending_in_opt[pending_in_opt['Activity'] >= lp['Activity']]
-                        if candidates.empty:
-                            continue
-                        cand = candidates.sort_values('Activity').iloc[0]
-                    
-                        # remove old entries
-                        opt_df = opt_df[opt_df['Ruler Name'] != cand['Ruler Name']]
-                        leftovers = leftovers[leftovers['Ruler Name'] != lp['Ruler Name']]
-                    
-                        # bring lp (non‑pending) into opt_df, with cand’s circle
-                        rec = lp.to_dict()
-                        rec['Trade Circle'] = cand['Trade Circle']
-                        opt_df = pd.concat([opt_df, pd.DataFrame([rec])], ignore_index=True)
-                    
-                        # send cand (pending) to leftovers
-                        leftovers = pd.concat([leftovers, pd.DataFrame([cand.to_dict()])],
-                                              ignore_index=True)
-                    
-                        # avoid reusing cand again
-                        pending_in_opt = pending_in_opt[pending_in_opt['Ruler Name'] != cand['Ruler Name']]
+                    pending_in_opt = opt_df[opt_df['Alliance Status']=='Pending']
                     
                     # (d) re‑sort & re‑index opt_df and leftovers
                     opt_df = (
