@@ -688,6 +688,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             "In Activity":     lp["Activity"],
                             "Swapped Out":     cand["Ruler Name"],
                             "Out Activity":    cand["Activity"],
+                         })
                         
                         # 5) don’t reuse this pending again
                         pending_in_opt = pending_in_opt[pending_in_opt['Ruler Name'] != cand['Ruler Name']]
