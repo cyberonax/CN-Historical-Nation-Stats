@@ -744,48 +744,51 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     # — 4) swap logic —
                     for _, cand in leftovers[leftovers["Alliance Status"] != "Pending"].iterrows():
                         lvl, circ = cand["Peace Mode Level"], cand["Trade Circle"]
-                        combo_str = rec_df.loc[
+                    
+                        # skip if this circle never made it into rec_df
+                        mask = (
                             (rec_df["Peace Mode Level"] == lvl) &
-                            (rec_df["Trade Circle"]      == circ),
-                            "Assigned Valid Resource Combination"
-                        ].iloc[0]
+                            (rec_df["Trade Circle"]     == circ)
+                        )
+                        choices = rec_df.loc[mask, "Assigned Valid Resource Combination"]
+                        if choices.empty:
+                            continue
+                        combo_str = choices.iloc[0]
+                    
                         cand_ov = overlap(cand["Resource 1+2"], combo_str)
-            
+                    
                         members = rec_df[
                             (rec_df["Peace Mode Level"] == lvl) &
-                            (rec_df["Trade Circle"]      == circ)
+                            (rec_df["Trade Circle"]     == circ)
                         ].copy()
                         members["overlap"] = members["Resource 1+2"].apply(lambda s: overlap(s, combo_str))
-            
+                    
                         to_swap = members[
                             ((members["Alliance Status"] == "Pending") & (cand["Activity"] < members["Activity"]))
                             | (cand_ov > members["overlap"])
                         ]
                         if to_swap.empty:
                             continue
-            
+                    
                         pending_swaps = to_swap[to_swap["Alliance Status"] == "Pending"]
                         out = (
                             pending_swaps.sort_values("Activity", ascending=False).iloc[0]
                             if not pending_swaps.empty
                             else to_swap.sort_values("overlap").iloc[0]
                         )
-            
+                    
                         idx = rec_df[
                             (rec_df["Peace Mode Level"] == lvl) &
-                            (rec_df["Trade Circle"]      == circ) &
-                            (rec_df["Ruler Name"]        == out["Ruler Name"])
+                            (rec_df["Trade Circle"]     == circ) &
+                            (rec_df["Ruler Name"]       == out["Ruler Name"])
                         ].index
                         rec_df.loc[idx, ["Ruler Name","Resource 1+2","Alliance Status","Activity"]] = \
                             cand[["Ruler Name","Resource 1+2","Alliance Status","Activity"]].values
-            
+                    
                         leftovers = leftovers[leftovers["Ruler Name"] != cand["Ruler Name"]]
                         leftovers = pd.concat([leftovers, pd.DataFrame([out])], ignore_index=True)
-            
-                    leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
-                    leftovers.index += 1
                     
-                    # — 7) Updated Trade Circles (post‑swap) —
+                    # — 5) Updated Trade Circles —
                     st.markdown("##### Updated Trade Circles")
                     st.dataframe(rec_df[[
                         "Peace Mode Level","Trade Circle","Ruler Name",
