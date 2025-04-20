@@ -643,62 +643,62 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
                     
-                    # identify pending players currently in circles
-                    pending_in_opt = opt_df[opt_df["Alliance Status"] == "Pending"].copy()
-                    
-                    # identify non‑pending leftovers
+                    # —— 2) swap in any non‑pending leftovers whose activity ≥ a pending circle member —— 
+                    pending_in_opt  = opt_df[opt_df["Alliance Status"] == "Pending"].copy()
                     nonpending_left = leftovers[leftovers["Alliance Status"] != "Pending"].copy()
                     
                     for _, np_row in nonpending_left.iterrows():
-                        # find pending with activity >= this non‑pending leftover
                         candidates = pending_in_opt[pending_in_opt["Activity"] >= np_row["Activity"]]
-                        if not candidates.empty:
-                            # pick the first (or apply your own tie‑breaker)
-                            p_row = candidates.iloc[0]
+                        if candidates.empty:
+                            continue
                     
-                            # 1️⃣ remove that pending from opt_df, add the non‑pending in its place
-                            opt_df = opt_df[opt_df["Ruler Name"] != p_row["Ruler Name"]]
-                            promoted = np_row.copy()
-                            promoted["Trade Circle"] = p_row["Trade Circle"]
-                            promoted["Peace Mode Level"] = p_row["Peace Mode Level"]
-                            opt_df = pd.concat([opt_df, pd.DataFrame([promoted])], ignore_index=True)
+                        # pick the first pending to swap out
+                        p_row = candidates.iloc[0]
                     
-                            # 2️⃣ remove that non‑pending from leftovers, add the pending there
-                            leftovers = leftovers[leftovers["Ruler Name"] != np_row["Ruler Name"]]
-                            leftovers = pd.concat([leftovers, pd.DataFrame([p_row])], ignore_index=True)
+                        # remove pending from circles, promote non‑pending into its circle
+                        opt_df = opt_df[opt_df["Ruler Name"] != p_row["Ruler Name"]]
+                        promoted = np_row.copy()
+                        promoted["Trade Circle"]     = p_row["Trade Circle"]
+                        promoted["Peace Mode Level"] = p_row["Peace Mode Level"]
+                        opt_df = pd.concat([opt_df, pd.DataFrame([promoted])], ignore_index=True)
                     
-                            # update pending pool so we don’t reuse the same one
-                            pending_in_opt = pending_in_opt[pending_in_opt["Ruler Name"] != p_row["Ruler Name"]]
-        
-                            opt_df = opt_df.sort_values(
-                                ["Peace Mode Level","Trade Circle","Ruler Name"], 
-                                key=lambda col: (
-                                    col.map(level_order) if col.name=="Peace Mode Level" 
-                                    else col if col.name=="Trade Circle" 
-                                    else col.str.lower()
-                                )
-                            ).reset_index(drop=True)
-                            opt_df.index += 1
-                            
-                            st.markdown("##### Optimal Trade Circles")
-                            st.dataframe(opt_df[[ 
-                                "Peace Mode Level","Trade Circle","Ruler Name",
-                                "Resource 1+2","Alliance","Team",
-                                "Days Old","Nation Drill Link","Activity"
-                            ]])
-                            
-                            # now the leftover table
-                            leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
-                            if not leftovers.empty:
-                                leftovers.index = range(1, len(leftovers)+1)
-                                st.markdown("##### Players Left Over")
-                                st.dataframe(leftovers[[
-                                    "Ruler Name","Resource 1+2","Alliance","Team",
-                                    "Days Old","Nation Drill Link","Activity"
-                                ]])
-                            else:
-                                st.markdown("##### Players Left Over")
-                                st.markdown("_No unmatched players remain._")
+                        # remove non‑pending from leftovers, send the pending there
+                        leftovers = leftovers[leftovers["Ruler Name"] != np_row["Ruler Name"]]
+                        leftovers = pd.concat([leftovers, pd.DataFrame([p_row])], ignore_index=True)
+                    
+                        # drop this pending from further consideration
+                        pending_in_opt = pending_in_opt[pending_in_opt["Ruler Name"] != p_row["Ruler Name"]]
+                    
+                    # —— 3) re‑index circles again after swaps —— 
+                    opt_df = opt_df.sort_values(
+                        ["Peace Mode Level","Trade Circle","Ruler Name"],
+                        key=lambda col: (
+                            col.map(level_order) if col.name=="Peace Mode Level"
+                            else col if col.name=="Trade Circle"
+                            else col.str.lower()
+                        )
+                    ).reset_index(drop=True)
+                    opt_df.index += 1
+                    
+                    # —— 4) render Optimal Trade Circles —— 
+                    st.markdown("##### Optimal Trade Circles")
+                    st.dataframe(opt_df[[
+                        "Peace Mode Level","Trade Circle","Ruler Name",
+                        "Resource 1+2","Alliance","Team",
+                        "Days Old","Nation Drill Link","Activity"
+                    ]])
+                    
+                    # —— 5) render Players Left Over —— 
+                    leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
+                    st.markdown("##### Players Left Over")
+                    if leftovers.empty:
+                        st.markdown("_No unmatched players remain._")
+                    else:
+                        leftovers.index = range(1, len(leftovers)+1)
+                        st.dataframe(leftovers[[
+                            "Ruler Name","Resource 1+2","Alliance","Team",
+                            "Days Old","Nation Drill Link","Activity"
+                        ]])
 
         # ——— Assign Peacetime Recommended Resources ———
         with st.expander("Assign Peacetime Recommended Resources"):
