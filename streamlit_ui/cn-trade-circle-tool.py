@@ -442,7 +442,8 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                     # —— NEW: prioritize non‑pending players in the pool
                     lvl_un = lvl_un.sort_values(
-                        by=(lvl_un['Alliance Status'] == "Pending")
+                        by="Alliance Status",
+                        key=lambda col: col.eq("Pending")
                     ).reset_index(drop=True)
 
                     # 1) identify incomplete circles
