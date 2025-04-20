@@ -784,8 +784,15 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
             
                     leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
                     leftovers.index += 1
-            
-                    # — 5) Players Left Over —
+                    
+                    # — 7) Updated Trade Circles (post‑swap) —
+                    st.markdown("##### Updated Trade Circles")
+                    st.dataframe(rec_df[[
+                        "Peace Mode Level","Trade Circle","Ruler Name",
+                        "Alliance","Team","Days Old","Nation Drill Link","Activity"
+                    ]], use_container_width=True)
+                    
+                    # — 6) Players Left Over —
                     st.markdown("##### Players Left Over")
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
@@ -795,46 +802,41 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             "Days Old","Nation Drill Link","Activity","Alliance Status"
                         ]], use_container_width=True)
             
-                    # — 6) Updated Trade Circles (post‑swap) —
-                    st.markdown("##### Updated Trade Circles (Post‑Swap)")
-                    st.dataframe(rec_df[[
-                        "Peace Mode Level","Trade Circle","Ruler Name",
-                        "Alliance","Team","Days Old","Nation Drill Link","Activity"
-                    ]], use_container_width=True)
+
             
-            # ——— Assign Peacetime Recommended Resources ———
-            with st.expander("Assign Peacetime Recommended Resources"):
-                st.markdown("##### Assign Peacetime Recommended Resources")
-                st.dataframe(
-                    rec_df[[
-                        "Peace Mode Level","Trade Circle","Ruler Name",
-                        "Resource 1+2","Alliance","Team","Days Old",
-                        "Nation Drill Link","Activity",
-                        "Assigned Resource 1+2","Assigned Valid Resource Combination"
-                    ]]
-                    .style
-                    .format({"Activity":"{:.1f}"})
-                    .set_properties(
-                        subset=["Assigned Valid Resource Combination"],
-                        **{"white-space":"normal","max-width":"1200px","text-align":"left"}
-                    ),
-                    use_container_width=True
-                )
-            
-                # Copy‑to‑Clipboard for Peacetime
-                peace_csv = rec_df.to_csv(index=False)
-                components.html(
-                    f"""
-                    <textarea id="peace-data" style="display:none;">{peace_csv}</textarea>
-                    <button
-                      onclick="navigator.clipboard.writeText(document.getElementById('peace-data').value)"
-                      style="margin-top:10px; padding:4px 8px;"
-                    >
-                      Copy Peacetime Table to Clipboard
-                    </button>
-                    """,
-                    height=60,
-                )
+        # ——— Assign Peacetime Recommended Resources ———
+        with st.expander("Assign Peacetime Recommended Resources"):
+            st.markdown("##### Assign Peacetime Recommended Resources")
+            st.dataframe(
+                rec_df[[
+                    "Peace Mode Level","Trade Circle","Ruler Name",
+                    "Resource 1+2","Alliance","Team","Days Old",
+                    "Nation Drill Link","Activity",
+                    "Assigned Resource 1+2","Assigned Valid Resource Combination"
+                ]]
+                .style
+                .format({"Activity":"{:.1f}"})
+                .set_properties(
+                    subset=["Assigned Valid Resource Combination"],
+                    **{"white-space":"normal","max-width":"1200px","text-align":"left"}
+                ),
+                use_container_width=True
+            )
+        
+            # Copy‑to‑Clipboard for Peacetime
+            peace_csv = rec_df.to_csv(index=False)
+            components.html(
+                f"""
+                <textarea id="peace-data" style="display:none;">{peace_csv}</textarea>
+                <button
+                  onclick="navigator.clipboard.writeText(document.getElementById('peace-data').value)"
+                  style="margin-top:10px; padding:4px 8px;"
+                >
+                  Copy Peacetime Table to Clipboard
+                </button>
+                """,
+                height=60,
+            )
 
         # ——— Assign Wartime Recommended Resources ———
         with st.expander("Assign Wartime Recommended Resources"):
