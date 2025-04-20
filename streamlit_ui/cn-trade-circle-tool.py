@@ -434,12 +434,26 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                 final_records = []
 
-                # build full circles per level, including any partials
+                # build full circles per level, dissolving the most‐empty incomplete circles first
                 for level in ['Level A', 'Level B', 'Level C']:
                     lvl_base = pm_base[pm_base['Peace Mode Level'] == level].copy()
                     lvl_un   = pm_unmatched[pm_unmatched['Peace Mode Level'] == level].copy()
 
-                    # fill incomplete circles first
+                    # 1) identify incomplete circles
+                    sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
+                    incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
+
+                    # 2) dissolve all but the one with the fewest empty slots
+                    if len(incomplete) > 1:
+                        sorted_inc = sorted(incomplete.items(), key=lambda x: x[1])
+                        keep_circle = sorted_inc[0][0]
+                        dissolve_circles = [c for c, _ in sorted_inc[1:]]
+                        # move dissolved members back to pool
+                        to_move = lvl_base[lvl_base['Trade Circle'].isin(dissolve_circles)].copy()
+                        lvl_un = pd.concat([lvl_un, to_move], ignore_index=True)
+                        lvl_base = lvl_base[~lvl_base['Trade Circle'].isin(dissolve_circles)].copy()
+
+                    # 3) recompute incomplete on the remaining circles
                     sizes      = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
                     incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
                     for circle_id, slots in sorted(incomplete.items(), key=lambda x: x[1]):
