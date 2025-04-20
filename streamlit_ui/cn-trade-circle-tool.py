@@ -9,6 +9,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 import io
 import streamlit.components.v1 as components
+from collections import Counter
 
 st.set_page_config(layout="wide")
 
@@ -611,9 +612,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                     # — 2) Hungarian assignment → rec_df  —
                     rec_records = []
-                    from scipy.optimize import linear_sum_assignment
-                    from collections import Counter
-            
                     def find_best_match(current, combos):
                         best, score = None, float("inf")
                         for combo in combos:
@@ -632,59 +630,68 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
             
                     for level in ["Level A","Level B","Level C"]:
                         df_lvl = opt_df[opt_df["Peace Mode Level"] == level]
-                        if df_lvl.empty: continue
+                        if df_lvl.empty:
+                            continue
                         for circle in sorted(df_lvl["Trade Circle"].unique()):
                             grp = df_lvl[df_lvl["Trade Circle"] == circle].reset_index(drop=True)
-                            all_res = sum(([r.strip() for r in s.split(",") if r.strip()] for s in grp["Resource 1+2"]), [])
-                            combo   = find_best_match(sorted(set(all_res)), valid_combos[level])
+                            all_res = sum(
+                                ([r.strip() for r in s.split(",") if r.strip()] for s in grp["Resource 1+2"]),
+                                []
+                            )
+                            combo = find_best_match(sorted(set(all_res)), valid_combos[level])
                             combo_str = ", ".join(combo)
             
                             avail, fixed, rem = Counter(combo), {}, []
                             for _, row in grp.iterrows():
                                 pair = tuple(r.strip() for r in row["Resource 1+2"].split(","))
-                                if avail[pair[0]]>0 and avail[pair[1]]>0:
+                                if avail[pair[0]] > 0 and avail[pair[1]] > 0:
                                     fixed[row["Ruler Name"]] = row["Resource 1+2"]
-                                    avail[pair[0]] -= 1; avail[pair[1]] -= 1
+                                    avail[pair[0]] -= 1
+                                    avail[pair[1]] -= 1
                                 else:
                                     rem.append(row["Ruler Name"])
             
-                            rem_res = list(avail.elements()); m = len(rem)
-                            slices = [ rem_res[2*i:2*i+2] for i in range(m) ]
-                            cost   = np.zeros((m,m), dtype=int)
+                            rem_res = list(avail.elements())
+                            m       = len(rem)
+                            slices  = [ rem_res[2*i:2*i+2] for i in range(m) ]
+                            cost    = np.zeros((m, m), dtype=int)
                             for i, ruler in enumerate(rem):
                                 curr = sorted(
-                                    r for r in grp.loc[grp["Ruler Name"]==ruler,"Resource 1+2"].iloc[0].split(",")
+                                    r for r in grp.loc[grp["Ruler Name"]==ruler, "Resource 1+2"].iloc[0].split(",")
                                 )
                                 for j, sl in enumerate(slices):
-                                    cost[i,j] = 2 - len(set(curr)&set(sl))
+                                    cost[i, j] = 2 - len(set(curr) & set(sl))
                             rows, cols = linear_sum_assignment(cost)
             
-                            # record fixed
                             for ruler, pair in fixed.items():
-                                row = grp[grp["Ruler Name"]==ruler].iloc[0]
+                                row = grp[grp["Ruler Name"] == ruler].iloc[0]
                                 rec_records.append({
-                                    "Peace Mode Level": level, "Trade Circle": circle,
-                                    "Ruler Name": ruler,
-                                    "Resource 1+2": row["Resource 1+2"],
-                                    "Alliance": row["Alliance"], "Team": row["Team"],
-                                    "Days Old": row["Days Old"],
-                                    "Nation Drill Link": row["Nation Drill Link"],
-                                    "Activity": row["Activity"],
+                                    "Peace Mode Level": level,
+                                    "Trade Circle":     circle,
+                                    "Ruler Name":       ruler,
+                                    "Resource 1+2":     row["Resource 1+2"],
+                                    "Alliance":         row["Alliance"],
+                                    "Team":             row["Team"],
+                                    "Days Old":         row["Days Old"],
+                                    "Nation Drill Link":row["Nation Drill Link"],
+                                    "Activity":         row["Activity"],
                                     "Assigned Resource 1+2": pair,
                                     "Assigned Valid Resource Combination": combo_str
                                 })
-                            # record Hungarian‑assigned
                             for i, j in zip(rows, cols):
-                                ruler = rem[i]; pair = slices[j]
-                                row   = grp[grp["Ruler Name"]==ruler].iloc[0]
+                                ruler = rem[i]
+                                pair  = slices[j]
+                                row   = grp[grp["Ruler Name"] == ruler].iloc[0]
                                 rec_records.append({
-                                    "Peace Mode Level": level, "Trade Circle": circle,
-                                    "Ruler Name": ruler,
-                                    "Resource 1+2": row["Resource 1+2"],
-                                    "Alliance": row["Alliance"], "Team": row["Team"],
-                                    "Days Old": row["Days Old"],
-                                    "Nation Drill Link": row["Nation Drill Link"],
-                                    "Activity": row["Activity"],
+                                    "Peace Mode Level": level,
+                                    "Trade Circle":     circle,
+                                    "Ruler Name":       ruler,
+                                    "Resource 1+2":     row["Resource 1+2"],
+                                    "Alliance":         row["Alliance"],
+                                    "Team":             row["Team"],
+                                    "Days Old":         row["Days Old"],
+                                    "Nation Drill Link":row["Nation Drill Link"],
+                                    "Activity":         row["Activity"],
                                     "Assigned Resource 1+2": f"{pair[0]}, {pair[1]}",
                                     "Assigned Valid Resource Combination": combo_str
                                 })
@@ -704,7 +711,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     rec_df.index += 1
                     rec_df["Activity"] = rec_df["Activity"].round(1)
             
-                    # — 3) build initial leftovers (singles + unassigned) —
+                    # — 3) build leftovers —
                     singles    = leftover_singles
                     opt_singles= leftover_opt_singles
                     unassigned = final_df[~final_df["Ruler Name"].isin(opt_df["Ruler Name"])]
@@ -716,51 +723,51 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             & {c.strip() for c in combo_str.split(",") if c.strip()}
                         )
             
-                    # — 4) swap any better non‑pending leftovers in —
-                    for _, cand in leftovers[leftovers["Alliance Status"]!="Pending"].iterrows():
+                    # — 4) swap logic —
+                    for _, cand in leftovers[leftovers["Alliance Status"] != "Pending"].iterrows():
                         lvl, circ = cand["Peace Mode Level"], cand["Trade Circle"]
                         combo_str = rec_df.loc[
-                            (rec_df["Peace Mode Level"]==lvl)&
-                            (rec_df["Trade Circle"]     ==circ),
+                            (rec_df["Peace Mode Level"] == lvl) &
+                            (rec_df["Trade Circle"]      == circ),
                             "Assigned Valid Resource Combination"
                         ].iloc[0]
                         cand_ov = overlap(cand["Resource 1+2"], combo_str)
             
                         members = rec_df[
-                            (rec_df["Peace Mode Level"]==lvl)&
-                            (rec_df["Trade Circle"]     ==circ)
+                            (rec_df["Peace Mode Level"] == lvl) &
+                            (rec_df["Trade Circle"]      == circ)
                         ].copy()
                         members["overlap"] = members["Resource 1+2"].apply(lambda s: overlap(s, combo_str))
             
                         to_swap = members[
-                            ((members["Alliance Status"]=="Pending") & (cand["Activity"]<members["Activity"]))
-                            | (cand_ov>members["overlap"])
+                            ((members["Alliance Status"] == "Pending") & (cand["Activity"] < members["Activity"]))
+                            | (cand_ov > members["overlap"])
                         ]
                         if to_swap.empty:
                             continue
             
-                        pending_swaps = to_swap[to_swap["Alliance Status"]=="Pending"]
+                        pending_swaps = to_swap[to_swap["Alliance Status"] == "Pending"]
                         out = (
-                            pending_swaps.sort_values("Activity",ascending=False).iloc[0]
+                            pending_swaps.sort_values("Activity", ascending=False).iloc[0]
                             if not pending_swaps.empty
                             else to_swap.sort_values("overlap").iloc[0]
                         )
             
                         idx = rec_df[
-                            (rec_df["Peace Mode Level"]==lvl)&
-                            (rec_df["Trade Circle"]     ==circ)&
-                            (rec_df["Ruler Name"]       ==out["Ruler Name"])
+                            (rec_df["Peace Mode Level"] == lvl) &
+                            (rec_df["Trade Circle"]      == circ) &
+                            (rec_df["Ruler Name"]        == out["Ruler Name"])
                         ].index
                         rec_df.loc[idx, ["Ruler Name","Resource 1+2","Alliance Status","Activity"]] = \
                             cand[["Ruler Name","Resource 1+2","Alliance Status","Activity"]].values
             
-                        leftovers = leftovers[leftovers["Ruler Name"]!=cand["Ruler Name"]]
-                        leftovers = pd.concat([leftovers, pd.DataFrame([out])],ignore_index=True)
+                        leftovers = leftovers[leftovers["Ruler Name"] != cand["Ruler Name"]]
+                        leftovers = pd.concat([leftovers, pd.DataFrame([out])], ignore_index=True)
             
                     leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
                     leftovers.index += 1
             
-                    # — 5) Players Left Over (post‑swap) —
+                    # — 5) Players Left Over —
                     st.markdown("##### Players Left Over")
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
@@ -770,13 +777,12 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             "Days Old","Nation Drill Link","Activity","Alliance Status"
                         ]], use_container_width=True)
             
-                    # — 6) Updated Trade Circles (Post‑Swap) —
+                    # — 6) Updated Trade Circles (post‑swap) —
                     st.markdown("##### Updated Trade Circles (Post‑Swap)")
                     st.dataframe(rec_df[[
                         "Peace Mode Level","Trade Circle","Ruler Name",
                         "Alliance","Team","Days Old","Nation Drill Link","Activity"
                     ]], use_container_width=True)
-            
             
             # ——— Assign Peacetime Recommended Resources ———
             with st.expander("Assign Peacetime Recommended Resources"):
