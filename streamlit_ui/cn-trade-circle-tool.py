@@ -597,8 +597,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
                     else:
-                        leftovers.index = range(1, len(leftovers)+1)
-                        st.dataframe(leftovers[[ … ]])
+                        st.dataframe(leftovers[[
+                            "Ruler Name","Resource 1+2","Alliance","Team",
+                            "Days Old","Nation Drill Link","Activity"
+                        ]])
 
         # ——— Assign Peacetime Recommended Resources ———
         with st.expander("Assign Peacetime Recommended Resources"):
