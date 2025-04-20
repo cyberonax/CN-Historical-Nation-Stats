@@ -644,51 +644,56 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     opt_df.index += 1
     
                     # ——— swap high‑activity pending players into leftovers ———
-                    # (1) recompute original leftovers
+                    
+                    # (a) rebuild leftovers from final_df + pre‑opt singles
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-                    leftovers = pd.concat([leftover_singles, leftover_opt_singles, leftovers],
-                                           ignore_index=True) \
-                                 .drop_duplicates(subset=['Ruler Name']) \
-                                 .reset_index(drop=True)
+                    leftovers = pd.concat([
+                        leftover_singles,
+                        leftover_opt_singles,
+                        leftovers
+                    ], ignore_index=True) \
+                     .drop_duplicates(subset=['Ruler Name']) \
+                     .reset_index(drop=True)
                     
-                    # (2) identify non‑pending leftovers and pending in opt_df
-                    non_pending = leftovers[leftovers['Alliance Status'] != 'Pending'].copy()
-                    pending_in_opt = opt_df[opt_df['Alliance Status'] == 'Pending'].copy()
+                    # (b) find non‑pending leftovers & pending in opt_df
+                    non_pending = leftovers[leftovers['Alliance Status'] != 'Pending']
+                    pending_in_opt = opt_df[opt_df['Alliance Status'] == 'Pending']
                     
-                    # (3) for each non‑pending leftover, try to swap in a pending with ≥ activity
+                    # (c) swap: for each non‑pending leftover, swap in the smallest‑activity pending ≥ theirs
                     for _, lp in non_pending.iterrows():
                         candidates = pending_in_opt[pending_in_opt['Activity'] >= lp['Activity']]
                         if candidates.empty:
                             continue
-                        # pick the pending with the **lowest** Activity ≥ the leftover's
                         cand = candidates.sort_values('Activity').iloc[0]
                     
-                        # remove the pending from opt_df and remove the non‑pending from leftovers
+                        # remove old entries
                         opt_df = opt_df[opt_df['Ruler Name'] != cand['Ruler Name']]
                         leftovers = leftovers[leftovers['Ruler Name'] != lp['Ruler Name']]
                     
-                        # bring the non‑pending into opt_df, preserving circle assignment
-                        new_rec = lp.to_dict()
-                        new_rec['Trade Circle'] = cand['Trade Circle']
-                        opt_df = pd.concat([opt_df, pd.DataFrame([new_rec])], ignore_index=True)
+                        # bring lp (non‑pending) into opt_df, with cand’s circle
+                        rec = lp.to_dict()
+                        rec['Trade Circle'] = cand['Trade Circle']
+                        opt_df = pd.concat([opt_df, pd.DataFrame([rec])], ignore_index=True)
                     
-                        # send the pending to leftovers
+                        # send cand (pending) to leftovers
                         leftovers = pd.concat([leftovers, pd.DataFrame([cand.to_dict()])],
                                               ignore_index=True)
                     
-                        # update our pending pool so we don't reuse this one
+                        # avoid reusing cand again
                         pending_in_opt = pending_in_opt[pending_in_opt['Ruler Name'] != cand['Ruler Name']]
                     
-                    # (4) resort and re‑index both tables
+                    # (d) re‑sort & re‑index opt_df and leftovers
                     opt_df = (
                         opt_df
-                        .sort_values(['Peace Mode Level','Trade Circle','Ruler Name'],
-                                     key=lambda col: (
-                                         col.map(level_order) if col.name=='Peace Mode Level'
-                                         else col if col.name=='Trade Circle'
-                                         else col.str.lower()
-                                     ))
+                        .sort_values(
+                            ['Peace Mode Level','Trade Circle','Ruler Name'],
+                            key=lambda col: (
+                                col.map(level_order) if col.name=='Peace Mode Level'
+                                else col if col.name=='Trade Circle'
+                                else col.str.lower()
+                            )
+                        )
                         .reset_index(drop=True)
                     )
                     opt_df.index += 1
