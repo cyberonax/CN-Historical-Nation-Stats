@@ -651,8 +651,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     # iterate over non‑pending in the optimal set
                     for idx, row in opt_df[opt_df['Alliance Status']!='Pending'].iterrows():
                         # find a pending candidate whose Activity ≥ this row’s Activity
-                        candidate = pending_left[pending_left['Activity'] >= row['Activity']]\
-                                        .sort_values('Activity', ascending=False)
+                        candidate = pending_left[pending_left['Activity'] >= row['Activity']].sort_values('Activity', ascending=False)
                         if not candidate.empty:
                             cand = candidate.iloc[0]
                             # stash the non‑pending info
