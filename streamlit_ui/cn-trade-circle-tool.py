@@ -642,7 +642,34 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         )
                     ).reset_index(drop=True)
                     opt_df.index += 1
-    
+                    
+                    # identify pending players currently in circles
+                    pending_in_opt = opt_df[opt_df["Alliance Status"] == "Pending"].copy()
+                    
+                    # identify non‑pending leftovers
+                    nonpending_left = leftovers[leftovers["Alliance Status"] != "Pending"].copy()
+                    
+                    for _, np_row in nonpending_left.iterrows():
+                        # find pending with activity >= this non‑pending leftover
+                        candidates = pending_in_opt[pending_in_opt["Activity"] >= np_row["Activity"]]
+                        if not candidates.empty:
+                            # pick the first (or apply your own tie‑breaker)
+                            p_row = candidates.iloc[0]
+                    
+                            # 1️⃣ remove that pending from opt_df, add the non‑pending in its place
+                            opt_df = opt_df[opt_df["Ruler Name"] != p_row["Ruler Name"]]
+                            promoted = np_row.copy()
+                            promoted["Trade Circle"] = p_row["Trade Circle"]
+                            promoted["Peace Mode Level"] = p_row["Peace Mode Level"]
+                            opt_df = pd.concat([opt_df, pd.DataFrame([promoted])], ignore_index=True)
+                    
+                            # 2️⃣ remove that non‑pending from leftovers, add the pending there
+                            leftovers = leftovers[leftovers["Ruler Name"] != np_row["Ruler Name"]]
+                            leftovers = pd.concat([leftovers, pd.DataFrame([p_row])], ignore_index=True)
+                    
+                            # update pending pool so we don’t reuse the same one
+                            pending_in_opt = pending_in_opt[pending_in_opt["Ruler Name"] != p_row["Ruler Name"]]
+        
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[ 
                         "Peace Mode Level","Trade Circle","Ruler Name",
