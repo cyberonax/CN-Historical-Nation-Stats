@@ -643,9 +643,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
     
-                    # ——— swap high‑activity pending players into leftovers ———
-                    
-                    # (a) rebuild leftovers from final_df + pre‑opt singles
+                    # ——— rebuild leftovers from final_df + pre‑opt singles ———
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
                     leftovers = pd.concat([
@@ -656,29 +654,36 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                      .drop_duplicates(subset=['Ruler Name']) \
                      .reset_index(drop=True)
                     
-                    # (b) if you need just the pending ones:
-                    pending_leftovers = leftovers[leftovers['Alliance Status']=='Pending'].copy()
+                    # ——— identify non‑pending leftovers & pending in opt_df ———
+                    non_pending    = leftovers[leftovers['Alliance Status'] != 'Pending']
+                    pending_in_opt = opt_df[opt_df['Alliance Status'] == 'Pending']
                     
-                    # (c) *** perform the swaps ***
+                    # ——— swap loop ———
                     for _, lp in non_pending.iterrows():
+                        # find any pending with Activity ≥ this non-pending’s
                         candidates = pending_in_opt[pending_in_opt['Activity'] >= lp['Activity']]
                         if candidates.empty:
                             continue
+                        # choose the lowest‑activity qualifying candidate
                         cand = candidates.sort_values('Activity').iloc[0]
-                
+                    
+                        # 1) remove them from their original places
                         opt_df    = opt_df[opt_df['Ruler Name'] != cand['Ruler Name']]
                         leftovers = leftovers[leftovers['Ruler Name'] != lp['Ruler Name']]
-                
-                        new_rec = lp.to_dict()
-                        new_rec['Trade Circle'] = cand['Trade Circle']
-                        opt_df = pd.concat([opt_df, pd.DataFrame([new_rec])], ignore_index=True)
-                
+                    
+                        # 2) insert the non-pending into opt_df at cand’s circle
+                        rec = lp.to_dict()
+                        rec['Trade Circle'] = cand['Trade Circle']
+                        opt_df = pd.concat([opt_df, pd.DataFrame([rec])], ignore_index=True)
+                    
+                        # 3) send the pending candidate into leftovers
                         leftovers = pd.concat([leftovers, pd.DataFrame([cand.to_dict()])],
                                               ignore_index=True)
-                
+                    
+                        # 4) don’t reuse this pending again
                         pending_in_opt = pending_in_opt[pending_in_opt['Ruler Name'] != cand['Ruler Name']]
-                
-                    # (d) re‑sort & re‑index both tables
+                    
+                    # ——— resort & re‑index both tables ———
                     opt_df = (
                         opt_df
                         .sort_values(
