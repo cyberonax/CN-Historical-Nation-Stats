@@ -609,7 +609,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
 
-                    # —— NEW: move any 1‑member circles from opt_df into leftovers too ——
+                    # —— 1) move any 1‑member circles from opt_df into leftovers too ——
                     # identify single‑nation circles in the optimized result
                     opt_counts = opt_df.groupby(['Peace Mode Level', 'Trade Circle']).size()
                     opt_singles = opt_counts[opt_counts == 1].reset_index()[['Peace Mode Level','Trade Circle']]
@@ -643,30 +643,31 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
                     
-                    # —— 2) swap in any non‑pending leftovers whose activity ≥ a pending circle member —— 
+                    # —— 2) SWAP any non‑pending leftover into opt_df if their activity ≥ a pending member —— 
                     pending_in_opt  = opt_df[opt_df["Alliance Status"] == "Pending"].copy()
                     nonpending_left = leftovers[leftovers["Alliance Status"] != "Pending"].copy()
                     
                     for _, np_row in nonpending_left.iterrows():
+                        # find any pending with activity ≥ this non‑pending leftover
                         candidates = pending_in_opt[pending_in_opt["Activity"] >= np_row["Activity"]]
                         if candidates.empty:
                             continue
                     
-                        # pick the first pending to swap out
+                        # pick one to swap out
                         p_row = candidates.iloc[0]
                     
-                        # remove pending from circles, promote non‑pending into its circle
+                        # — remove the pending from opt_df, promote the non‑pending into its circle
                         opt_df = opt_df[opt_df["Ruler Name"] != p_row["Ruler Name"]]
                         promoted = np_row.copy()
                         promoted["Trade Circle"]     = p_row["Trade Circle"]
                         promoted["Peace Mode Level"] = p_row["Peace Mode Level"]
                         opt_df = pd.concat([opt_df, pd.DataFrame([promoted])], ignore_index=True)
                     
-                        # remove non‑pending from leftovers, send the pending there
+                        # — remove the non‑pending from leftovers, send the pending there
                         leftovers = leftovers[leftovers["Ruler Name"] != np_row["Ruler Name"]]
                         leftovers = pd.concat([leftovers, pd.DataFrame([p_row])], ignore_index=True)
                     
-                        # drop this pending from further consideration
+                        # — don’t reuse this pending in subsequent swaps
                         pending_in_opt = pending_in_opt[pending_in_opt["Ruler Name"] != p_row["Ruler Name"]]
                     
                     # —— 3) re‑index circles again after swaps —— 
