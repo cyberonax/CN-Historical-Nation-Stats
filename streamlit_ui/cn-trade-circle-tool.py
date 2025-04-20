@@ -541,7 +541,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 try:
                     import pulp
                 except ImportError:
-                    st.error("🚨 *PuLP* is not installed. Add `pulp` to your dependencies and redeploy.")
+                    st.error("🚨 *PuLP* is not installed. Add pulp to your dependencies and redeploy.")
                 else:
                     import math
 
@@ -642,45 +642,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         )
                     ).reset_index(drop=True)
                     opt_df.index += 1
-                    
-                    # —— Swap non-pending leftovers with pending players if pending activity >= non-pending activity ——
-                    if not leftovers.empty:
-                        # Ensure we have 'Alliance Status' and 'Activity' columns
-                        if 'Alliance Status' not in leftovers.columns:
-                            leftovers = leftovers.merge(
-                                details[['Ruler Name', 'Alliance Status']],
-                                on='Ruler Name', how='left'
-                            )
-                        # Partition leftovers
-                        non_pending = leftovers[leftovers['Alliance Status'] != 'Pending'].copy()
-                        pending     = leftovers[leftovers['Alliance Status'] == 'Pending'].copy()
-            
-                        swapped = []
-                        drop_np_indices = []
-                        # For each non-pending leftover, attempt to swap
-                        for np_idx, np_row in non_pending.iterrows():
-                            # Find pending with activity >= this non-pending's activity
-                            candidates = pending[pending['Activity'] >= np_row['Activity']]
-                            if not candidates.empty:
-                                # Select the pending player with highest activity
-                                best_idx = candidates['Activity'].idxmax()
-                                swapped.append(pending.loc[best_idx])
-                                drop_np_indices.append(np_idx)
-                                # Remove selected from future consideration
-                                pending = pending.drop(best_idx)
-            
-                        # Remaining non-pending after drop
-                        remaining_non_pending = non_pending.drop(drop_np_indices)
-        
-                    # Reassemble leftovers: keep remaining non-pending and pending, plus swapped-in pending
-                    leftovers = pd.concat([
-                        remaining_non_pending,
-                        pending,
-                        pd.DataFrame(swapped)
-                    ], ignore_index=True)
-                    # Remove any duplicates and reset index
-                    leftovers = leftovers.drop_duplicates(subset=['Ruler Name']).reset_index(drop=True)
-
+    
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[ 
                         "Peace Mode Level","Trade Circle","Ruler Name",
