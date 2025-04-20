@@ -602,15 +602,14 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                                     break
         
                     # build opt_df
-                    opt_df = pd.DataFrame(optimal_records)
                     renumbered = []
                     for lvl, grp in opt_df.groupby('Peace Mode Level', sort=False):
-                        ids = sorted(grp['Trade Circle'].unique())
+                        ids   = sorted(grp['Trade Circle'].unique())
                         id_map = {old:new for new,old in enumerate(ids,1)}
-                        tmp = grp.copy(); tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
+                        tmp    = grp.copy()
+                        tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
                         renumbered.append(tmp)
                     opt_df = pd.concat(renumbered, ignore_index=True)
-        
                     opt_df = opt_df.sort_values(
                         ['Peace Mode Level','Trade Circle','Ruler Name'],
                         key=lambda col: (
@@ -621,6 +620,19 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
 
+                    # —— NEW: move any 1‑member circles from opt_df into leftovers too ——
+                    opt_counts  = opt_df.groupby(['Peace Mode Level','Trade Circle']).size()
+                    opt_singles = opt_counts[opt_counts == 1].reset_index()[['Peace Mode Level','Trade Circle']]
+                
+                    if not opt_singles.empty:
+                        mask = opt_df.set_index(['Peace Mode Level','Trade Circle']).index.isin(
+                            list(opt_singles.itertuples(index=False, name=None))
+                        )
+                        leftover_opt_singles = opt_df[mask].copy()
+                        opt_df = opt_df[~mask].copy()
+                    else:
+                        leftover_opt_singles = pd.DataFrame(columns=opt_df.columns)
+        
                     # — 2) Hungarian assignment → rec_df  —
                     rec_records = []
             
