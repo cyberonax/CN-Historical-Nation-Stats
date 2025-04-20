@@ -498,14 +498,20 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 ).reset_index(drop=True)
                 final_df.index += 1
 
-                # now optimize with PuLP (unchanged)
+                # —— NEW: pull out any 1‑member circles as "singles" ——
+                counts = final_df.groupby('Trade Circle').size()
+                single_circles = counts[counts == 1].index.tolist()
+                if single_circles:
+                    leftover_singles = final_df[final_df['Trade Circle'].isin(single_circles)].copy()
+                    final_df = final_df[~final_df['Trade Circle'].isin(single_circles)].copy()
+                else:
+                    leftover_singles = pd.DataFrame(columns=final_df.columns)
+                
+                # now optimize with PuLP (unchanged) …
                 try:
                     import pulp
                 except ImportError:
-                    st.error(
-                        "🚨 *PuLP* is not installed. "
-                        "Add `pulp` to your dependencies and redeploy."
-                    )
+                    st.error("🚨 *PuLP* is not installed. Add `pulp` to your dependencies and redeploy.")
                 else:
                     import math
 
@@ -580,17 +586,19 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         "Days Old","Nation Drill Link","Activity"
                     ]])
         
-                    st.markdown("##### Players Left Over")
+                    # —— updated Players Left Over ——
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
+    
+                    # include those single‑member circles
+                    leftovers = pd.concat([leftover_singles, leftovers], ignore_index=True)
+    
+                    st.markdown("##### Players Left Over")
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
                     else:
                         leftovers.index = range(1, len(leftovers)+1)
-                        st.dataframe(leftovers[[
-                            "Ruler Name","Resource 1+2","Alliance","Team",
-                            "Days Old","Nation Drill Link","Activity"
-                        ]])
+                        st.dataframe(leftovers[[ … ]])
 
         # ——— Assign Peacetime Recommended Resources ———
         with st.expander("Assign Peacetime Recommended Resources"):
