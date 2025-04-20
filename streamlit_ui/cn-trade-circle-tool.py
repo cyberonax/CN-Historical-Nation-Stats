@@ -609,75 +609,11 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
 
-                    # —— NEW: move any 1‑member circles from opt_df into leftovers too ——
-                    # identify single‑nation circles in the optimized result
-                    opt_counts = opt_df.groupby(['Peace Mode Level', 'Trade Circle']).size()
-                    opt_singles = opt_counts[opt_counts == 1].reset_index()[['Peace Mode Level','Trade Circle']]
-    
-                    if not opt_singles.empty:
-                        # extract them
-                        mask = opt_df.set_index(['Peace Mode Level','Trade Circle']).index.isin(
-                            list(opt_singles.itertuples(index=False, name=None))
-                        )
-                        leftover_opt_singles = opt_df[mask].copy()
-                        opt_df = opt_df[~mask].copy()
-                    else:
-                        leftover_opt_singles = pd.DataFrame(columns=opt_df.columns)
-    
-                    # re‑number any remaining circles in opt_df
-                    renumbered = []
-                    for lvl, grp in opt_df.groupby('Peace Mode Level', sort=False):
-                        ids = sorted(grp['Trade Circle'].unique())
-                        id_map = {old:new for new,old in enumerate(ids,1)}
-                        tmp = grp.copy()
-                        tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
-                        renumbered.append(tmp)
-                    opt_df = pd.concat(renumbered, ignore_index=True)
-                    opt_df = opt_df.sort_values(
-                        ['Peace Mode Level','Trade Circle','Ruler Name'],
-                        key=lambda col: (
-                            col.map(level_order) if col.name=='Peace Mode Level'
-                            else col if col.name=='Trade Circle'
-                            else col.str.lower()
-                        )
-                    ).reset_index(drop=True)
-                    opt_df.index += 1
-                    
-                    # — extract and remove single‑nation circles —
-                    opt_counts  = opt_df.groupby(['Peace Mode Level','Trade Circle']).size()
-                    opt_singles = opt_counts[opt_counts == 1].reset_index()[['Peace Mode Level','Trade Circle']]
-                    if not opt_singles.empty:
-                        mask = opt_df.set_index(['Peace Mode Level','Trade Circle']).index.isin(
-                            list(opt_singles.itertuples(index=False,name=None))
-                        )
-                        leftover_opt_singles = opt_df[mask].copy()
-                        opt_df              = opt_df[~mask].copy()
-                    else:
-                        leftover_opt_singles = pd.DataFrame(columns=opt_df.columns)
-            
-                    # — renumber remaining circles —
-                    renumbered = []
-                    for lvl, grp in opt_df.groupby('Peace Mode Level', sort=False):
-                        ids    = sorted(grp['Trade Circle'].unique())
-                        id_map = {old:new for new,old in enumerate(ids,1)}
-                        tmp    = grp.copy(); tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
-                        renumbered.append(tmp)
-                    opt_df = pd.concat(renumbered, ignore_index=True)
-                    opt_df = opt_df.sort_values(
-                        ['Peace Mode Level','Trade Circle','Ruler Name'],
-                        key=lambda col: col.map(level_order) if col.name=='Peace Mode Level' else col
-                    ).reset_index(drop=True)
-                    opt_df.index += 1
-            
-                    st.markdown("##### Optimal Trade Circles")
-                    st.dataframe(opt_df[[
-                        "Peace Mode Level","Trade Circle","Ruler Name",
-                        "Resource 1+2","Alliance","Team",
-                        "Days Old","Nation Drill Link","Activity"
-                    ]], use_container_width=True)
-            
-                    # — build peacetime assignments via Hungarian algorithm —
+                    # — 2) Hungarian assignment → rec_df  —
                     rec_records = []
+                    from scipy.optimize import linear_sum_assignment
+                    from collections import Counter
+            
                     def find_best_match(current, combos):
                         best, score = None, float("inf")
                         for combo in combos:
@@ -695,11 +631,12 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     }
             
                     for level in ["Level A","Level B","Level C"]:
-                        lvl_df = opt_df[opt_df["Peace Mode Level"] == level]
-                        for circle in sorted(lvl_df["Trade Circle"].unique()):
-                            grp = lvl_df[lvl_df["Trade Circle"] == circle].reset_index(drop=True)
+                        df_lvl = opt_df[opt_df["Peace Mode Level"] == level]
+                        if df_lvl.empty: continue
+                        for circle in sorted(df_lvl["Trade Circle"].unique()):
+                            grp = df_lvl[df_lvl["Trade Circle"] == circle].reset_index(drop=True)
                             all_res = sum(([r.strip() for r in s.split(",") if r.strip()] for s in grp["Resource 1+2"]), [])
-                            combo = find_best_match(sorted(set(all_res)), valid_combos[level])
+                            combo   = find_best_match(sorted(set(all_res)), valid_combos[level])
                             combo_str = ", ".join(combo)
             
                             avail, fixed, rem = Counter(combo), {}, []
@@ -712,20 +649,23 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                                     rem.append(row["Ruler Name"])
             
                             rem_res = list(avail.elements()); m = len(rem)
-                            slices = [rem_res[2*i:2*i+2] for i in range(m)]
+                            slices = [ rem_res[2*i:2*i+2] for i in range(m) ]
                             cost   = np.zeros((m,m), dtype=int)
                             for i, ruler in enumerate(rem):
-                                curr = sorted(r for r in grp.loc[grp["Ruler Name"]==ruler,"Resource 1+2"].iloc[0].split(","))
+                                curr = sorted(
+                                    r for r in grp.loc[grp["Ruler Name"]==ruler,"Resource 1+2"].iloc[0].split(",")
+                                )
                                 for j, sl in enumerate(slices):
-                                    cost[i,j] = 2 - len(set(curr) & set(sl))
+                                    cost[i,j] = 2 - len(set(curr)&set(sl))
                             rows, cols = linear_sum_assignment(cost)
             
+                            # record fixed
                             for ruler, pair in fixed.items():
                                 row = grp[grp["Ruler Name"]==ruler].iloc[0]
                                 rec_records.append({
                                     "Peace Mode Level": level, "Trade Circle": circle,
                                     "Ruler Name": ruler,
-                                    "Current Resource 1+2": row["Resource 1+2"],
+                                    "Resource 1+2": row["Resource 1+2"],
                                     "Alliance": row["Alliance"], "Team": row["Team"],
                                     "Days Old": row["Days Old"],
                                     "Nation Drill Link": row["Nation Drill Link"],
@@ -733,13 +673,14 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                                     "Assigned Resource 1+2": pair,
                                     "Assigned Valid Resource Combination": combo_str
                                 })
+                            # record Hungarian‑assigned
                             for i, j in zip(rows, cols):
                                 ruler = rem[i]; pair = slices[j]
                                 row   = grp[grp["Ruler Name"]==ruler].iloc[0]
                                 rec_records.append({
                                     "Peace Mode Level": level, "Trade Circle": circle,
                                     "Ruler Name": ruler,
-                                    "Current Resource 1+2": row["Resource 1+2"],
+                                    "Resource 1+2": row["Resource 1+2"],
                                     "Alliance": row["Alliance"], "Team": row["Team"],
                                     "Days Old": row["Days Old"],
                                     "Nation Drill Link": row["Nation Drill Link"],
@@ -748,28 +689,34 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                                     "Assigned Valid Resource Combination": combo_str
                                 })
             
-                    rec_df = pd.DataFrame(rec_records).sort_values(
-                        ["Peace Mode Level","Trade Circle","Ruler Name"],
-                        key=lambda col: (
-                            col.map(level_order) if col.name=="Peace Mode Level"
-                            else col if col.name=="Trade Circle"
-                            else col.str.lower()
-                        )
-                    ).reset_index(drop=True)
+                    rec_df = (
+                        pd.DataFrame(rec_records)
+                          .sort_values(
+                              ["Peace Mode Level","Trade Circle","Ruler Name"],
+                              key=lambda col: (
+                                  col.map(level_order) if col.name=="Peace Mode Level"
+                                  else col if col.name=="Trade Circle"
+                                  else col.str.lower()
+                              )
+                          )
+                          .reset_index(drop=True)
+                    )
                     rec_df.index += 1
                     rec_df["Activity"] = rec_df["Activity"].round(1)
             
-                    # — initial leftovers for potential swaps —
-                    leftover_records = list(leftover_singles) + list(leftover_opt_singles) + [
-                        row.to_dict() for _, row in final_df[~final_df["Ruler Name"].isin(opt_df["Ruler Name"])].iterrows()
-                    ]
-                    leftovers = pd.DataFrame(leftover_records)
+                    # — 3) build initial leftovers (singles + unassigned) —
+                    singles    = leftover_singles
+                    opt_singles= leftover_opt_singles
+                    unassigned = final_df[~final_df["Ruler Name"].isin(opt_df["Ruler Name"])]
+                    leftovers  = pd.concat([singles, opt_singles, unassigned], ignore_index=True)
             
                     def overlap(res_str, combo_str):
-                        return len({r.strip() for r in res_str.split(",") if r.strip()} &
-                                   {c.strip() for c in combo_str.split(",") if c.strip()})
+                        return len(
+                            {r.strip() for r in res_str.split(",") if r.strip()}
+                            & {c.strip() for c in combo_str.split(",") if c.strip()}
+                        )
             
-                    # — swap better non‑pending into circles —
+                    # — 4) swap any better non‑pending leftovers in —
                     for _, cand in leftovers[leftovers["Alliance Status"]!="Pending"].iterrows():
                         lvl, circ = cand["Peace Mode Level"], cand["Trade Circle"]
                         combo_str = rec_df.loc[
@@ -793,23 +740,27 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             continue
             
                         pending_swaps = to_swap[to_swap["Alliance Status"]=="Pending"]
-                        out = (pending_swaps.sort_values("Activity",ascending=False).iloc[0]
-                               if not pending_swaps.empty else to_swap.sort_values("overlap").iloc[0])
+                        out = (
+                            pending_swaps.sort_values("Activity",ascending=False).iloc[0]
+                            if not pending_swaps.empty
+                            else to_swap.sort_values("overlap").iloc[0]
+                        )
             
-                        mask = (
+                        idx = rec_df[
                             (rec_df["Peace Mode Level"]==lvl)&
                             (rec_df["Trade Circle"]     ==circ)&
                             (rec_df["Ruler Name"]       ==out["Ruler Name"])
-                        )
-                        rec_df.loc[mask, ["Ruler Name","Resource 1+2","Alliance Status","Activity"]] = \
+                        ].index
+                        rec_df.loc[idx, ["Ruler Name","Resource 1+2","Alliance Status","Activity"]] = \
                             cand[["Ruler Name","Resource 1+2","Alliance Status","Activity"]].values
             
                         leftovers = leftovers[leftovers["Ruler Name"]!=cand["Ruler Name"]]
-                        leftovers = pd.concat([leftovers,pd.DataFrame([out])],ignore_index=True)
+                        leftovers = pd.concat([leftovers, pd.DataFrame([out])],ignore_index=True)
             
                     leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
                     leftovers.index += 1
             
+                    # — 5) Players Left Over (post‑swap) —
                     st.markdown("##### Players Left Over")
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
@@ -819,13 +770,34 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             "Days Old","Nation Drill Link","Activity","Alliance Status"
                         ]], use_container_width=True)
             
+                    # — 6) Updated Trade Circles (Post‑Swap) —
+                    st.markdown("##### Updated Trade Circles (Post‑Swap)")
+                    st.dataframe(rec_df[[
+                        "Peace Mode Level","Trade Circle","Ruler Name",
+                        "Alliance","Team","Days Old","Nation Drill Link","Activity"
+                    ]], use_container_width=True)
+            
             
             # ——— Assign Peacetime Recommended Resources ———
             with st.expander("Assign Peacetime Recommended Resources"):
                 st.markdown("##### Assign Peacetime Recommended Resources")
-                st.dataframe(styled_rec, use_container_width=True)
+                st.dataframe(
+                    rec_df[[
+                        "Peace Mode Level","Trade Circle","Ruler Name",
+                        "Resource 1+2","Alliance","Team","Days Old",
+                        "Nation Drill Link","Activity",
+                        "Assigned Resource 1+2","Assigned Valid Resource Combination"
+                    ]]
+                    .style
+                    .format({"Activity":"{:.1f}"})
+                    .set_properties(
+                        subset=["Assigned Valid Resource Combination"],
+                        **{"white-space":"normal","max-width":"1200px","text-align":"left"}
+                    ),
+                    use_container_width=True
+                )
             
-                # Copy‐to‐Clipboard for Peacetime
+                # Copy‑to‑Clipboard for Peacetime
                 peace_csv = rec_df.to_csv(index=False)
                 components.html(
                     f"""
