@@ -440,11 +440,19 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     lvl_base = pm_base[pm_base['Peace Mode Level'] == level].copy()
                     lvl_un   = pm_unmatched[pm_unmatched['Peace Mode Level'] == level].copy()
 
-                    # —— NEW: prioritize non‑pending players in the pool
-                    lvl_un = lvl_un.sort_values(
-                        by="Alliance Status",
-                        key=lambda col: col.eq("Pending")
-                    ).reset_index(drop=True)
+                    # —— ensure we have Alliance Status on the pool so we can deprioritize Pending —— 
+                    if 'Alliance Status' not in lvl_un.columns:
+                        snapshot_status = latest_snapshot[['Ruler Name', 'Alliance Status']].drop_duplicates()
+                        lvl_un = lvl_un.merge(snapshot_status, on='Ruler Name', how='left')
+    
+                    # —— prioritize non‑pending players in the pool (if any Pending exist) —— 
+                    if 'Pending' in lvl_un['Alliance Status'].values:
+                        lvl_un = lvl_un.sort_values(
+                            by='Alliance Status',
+                            key=lambda col: col.eq('Pending')
+                        ).reset_index(drop=True)
+                    else:
+                        lvl_un = lvl_un.reset_index(drop=True)
 
                     # 1) identify incomplete circles
                     sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
