@@ -710,6 +710,8 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     
                     leftovers = leftovers.reset_index(drop=True)
                     leftovers.index = range(1, len(leftovers) + 1)
+                    swaps_df = pd.DataFrame(swap_records)
+                    swaps_df.index += 1
 
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[
