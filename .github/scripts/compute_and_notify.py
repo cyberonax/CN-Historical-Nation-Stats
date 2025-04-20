@@ -13,7 +13,7 @@ ZIP_FOLDER      = "downloaded_zips"
 LAST_ID_FILE    = ".github/scripts/last_msg_id.txt"
 TARGET_ALLIANCE = "Freehold of The Wolves"
 
-# Column names to metrics mapping
+# Mapping column names to friendly labels
 LABEL_MAP = {
     "nation_count":               "Nation Count",
     "avg_inactivity":             "Average Alliance Inactivity (Days)",
@@ -33,7 +33,7 @@ LABEL_MAP = {
     "avg_Defensive_Casualties":   "Average Defensive Casualties"
 }
 
-# Desired order of metrics and titles
+# Desired order of metrics
 METRICS = [
     "nation_count",
     "avg_inactivity",
@@ -53,34 +53,30 @@ METRICS = [
     "avg_Defensive_Casualties"
 ]
 
-# Activity and resource mapping
+# Activity mapping and resource columns
 ACTIVITY_MAP = {
     "Active In The Last 3 Days":        3,
     "Active This Week":                  7,
-    "Active Last Week":                 14,
-    "Active Three Weeks Ago":           21,
-    "Active More Than Three Weeks Ago": 28
+    "Active Last Week":                  14,
+    "Active Three Weeks Ago":            21,
+    "Active More Than Three Weeks Ago":  28
 }
 RESOURCE_COLS = [f"Connected Resource {i}" for i in range(1, 11)]
 
-# HELPER FUNCTIONS
+# Helper functions
 
 def parse_date(fn):
     m = re.match(r"^CyberNations_SE_Nation_Stats_([0-9]+)(510001|510002)\.zip$", fn)
-    if not m:
-        return None
+    if not m: return None
     token, zipid = m.groups()
     hour = 0 if zipid == "510001" else 12
     for md in (1,2):
         for dd in (1,2):
-            if md + dd + 4 == len(token):
+            if md+dd+4 == len(token):
                 try:
-                    month = int(token[:md])
-                    day   = int(token[md:md+dd])
-                    year  = int(token[md+dd:])
+                    month = int(token[:md]); day = int(token[md:md+dd]); year = int(token[md+dd:])
                     return datetime(year, month, day, hour)
-                except ValueError:
-                    pass
+                except: pass
     return None
 
 
@@ -88,8 +84,7 @@ def load_data():
     dfs = []
     for zp in Path(ZIP_FOLDER).glob("*.zip"):
         dt = parse_date(zp.name)
-        if not dt:
-            continue
+        if not dt: continue
         with zipfile.ZipFile(zp) as z, z.open(z.namelist()[0]) as f:
             df = pd.read_csv(f, delimiter="|", encoding="ISO-8859-1", low_memory=False)
             df["snapshot_date"] = pd.to_datetime(dt)
@@ -98,65 +93,65 @@ def load_data():
 
 
 def preprocess(df):
-    # Filter alliance
     df = df[df.get("Alliance") == TARGET_ALLIANCE].copy()
-    # Numeric conversions
-    for c in ["Technology", "Infrastructure", "Base Land", "Strength",
-              "Attacking Casualties", "Defensive Casualties"]:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c].astype(str).str.replace(",", ""), errors="coerce")
+    # Numeric conversion
+    for col in ["Technology","Infrastructure","Base Land","Strength",
+                "Attacking Casualties","Defensive Casualties"]:
+        if col in df:
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(",",""), errors="coerce")
     # Empty trade slots
-    df["Empty_Slots"] = (
-        df[RESOURCE_COLS]
-          .apply(lambda r: sum(1 for v in r if pd.isna(v) or str(v).strip()==""), axis=1)
-          // 2
-    )
-    # Activity mapping
-    if "Activity" in df.columns:
+    df["Empty_Slots"] = df[RESOURCE_COLS].apply(
+        lambda r: sum(1 for v in r if pd.isna(v) or str(v).strip()==""), axis=1
+    ) // 2
+    # Activity
+    if "Activity" in df:
         df["avg_inactivity"] = df["Activity"].map(ACTIVITY_MAP)
     return df
 
 
 def aggregate(df):
-    # Core aggregates
     agg = df.groupby("snapshot_date").agg(
-        nation_count=("Nation ID", "count"),
-        Technology=("Technology", "sum"),
-        Infrastructure=("Infrastructure", "sum"),
-        Base_Land=("Base Land", "sum"),
-        Strength=("Strength", "sum"),
-        Attacking_Casualties=("Attacking Casualties", "sum"),
-        Defensive_Casualties=("Defensive Casualties", "sum"),
-        Empty_Slots=("Empty_Slots", "sum"),
-        avg_inactivity=("avg_inactivity", "mean")
+        nation_count=("Nation ID","count"),
+        Technology=("Technology","sum"),
+        Infrastructure=("Infrastructure","sum"),
+        Base_Land=("Base Land","sum"),
+        Strength=("Strength","sum"),
+        Attacking_Casualties=("Attacking Casualties","sum"),
+        Defensive_Casualties=("Defensive Casualties","sum"),
+        Empty_Slots=("Empty_Slots","sum"),
+        avg_inactivity=("avg_inactivity","mean")
     ).sort_index()
     # Per-nation averages
-    for base in ["Technology", "Infrastructure", "Base_Land", "Strength",
-                 "Attacking_Casualties", "Defensive_Casualties"]:
+    for base in ["Technology","Infrastructure","Base_Land","Strength",
+                 "Attacking_Casualties","Defensive_Casualties"]:
         agg[f"avg_{base}"] = agg[base] / agg["nation_count"]
-    # Percent empty slots
+    # % empty
     total = df.groupby("snapshot_date")["Nation ID"].count()
-    empties = df[df["Empty_Slots"] > 0].groupby("snapshot_date")["Nation ID"].count()
-    agg["%_empty"] = (empties.reindex(agg.index, fill_value=0) / total.reindex(agg.index)) * 100
+    empties = df[df["Empty_Slots"]>0].groupby("snapshot_date")["Nation ID"].count()
+    agg["%_empty"] = (empties.reindex(agg.index,0)/total.reindex(agg.index,0))*100
     return agg
 
 
-def growth(series):
-    first, last = series.iloc[0], series.iloc[-1]
-    days = max((series.index[-1] - series.index[0]).days, 1)
+def growth(s):
+    first, last = s.iloc[0], s.iloc[-1]
+    days = max((last.name - first.name).days, 1)
     return (last - first) / days
 
 
-def plot_series(series, title, fname):
-    plt.figure(figsize=(6, 3))
-    plt.plot(series.index, series.values, marker="o")
-    plt.title(title)
-    plt.xticks(rotation=45, ha="right")
+def plot_grid(metrics, agg, fname):
+    n = len(metrics)
+    cols = 2
+    rows = (n + cols - 1) // cols
+    fig, axes = plt.subplots(rows, cols, figsize=(10, 4*rows))
+    axes = axes.flatten()
+    for ax, m in zip(axes, metrics):
+        ax.plot(agg.index, agg[m], marker='o')
+        ax.set_title(LABEL_MAP[m])
+        ax.tick_params(axis='x', rotation=45)
+    for ax in axes[n:]:
+        ax.axis('off')
     plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png")
-    buf.seek(0)
-    plt.close()
+    buf = io.BytesIO(); fig.savefig(buf, format='png'); buf.seek(0); plt.close(fig)
     return fname, buf
 
 
@@ -164,10 +159,8 @@ def delete_last():
     if Path(LAST_ID_FILE).exists():
         mid = Path(LAST_ID_FILE).read_text().strip()
         if mid:
-            try:
-                requests.delete(f"{WEBHOOK_URL}/messages/{mid}")
-            except:
-                pass
+            try: requests.delete(f"{WEBHOOK_URL}/messages/{mid}")
+            except: pass
         Path(LAST_ID_FILE).write_text("")
 
 
@@ -178,14 +171,10 @@ def record_last(mid):
 
 def post_new(content, attachments):
     delete_last()
-    embeds = [{"image": {"url": f"attachment://{fn}"}} for fn, _ in attachments]
-    payload = {"content": content, "embeds": embeds}
-    files = [(f"file{i}", (fn, buf, "image/png")) for i, (fn, buf) in enumerate(attachments)]
-    resp = requests.post(
-        f"{WEBHOOK_URL}?wait=true",
-        data={"payload_json": json.dumps(payload)},
-        files=files
-    )
+    embeds=[{"image":{"url":f"attachment://{fn}"}} for fn,_ in attachments]
+    payload={"content":content, "embeds":embeds}
+    files=[(f"file{i}",(fn,buf,"image/png")) for i,(fn,buf) in enumerate(attachments)]
+    resp = requests.post(f"{WEBHOOK_URL}?wait=true", data={"payload_json":json.dumps(payload)}, files=files)
     resp.raise_for_status()
     return resp.json()["id"]
 
@@ -200,33 +189,27 @@ def main():
     latest = agg.iloc[-1]
     ts = latest.name.strftime("%Y-%m-%d %H:%M")
 
-    # Build text summary
-    lines = [f"**Aggregated Stats for {TARGET_ALLIANCE} (snapshot {ts})**"]
+    # Text summary
+    lines=[f"**Aggregated Stats for {TARGET_ALLIANCE} (snapshot {ts})**"]
     for m in METRICS:
-        if m not in agg.columns:
-            continue
-        curr = latest[m]
+        if m not in agg.columns: continue
+        curr = agg[m].iloc[-1]
         gr   = growth(agg[m])
         lbl  = LABEL_MAP[m]
-        if pd.isna(curr):
-            continue
-        # Format integer vs float
         val_str = f"{curr:.2f}" if isinstance(curr, float) else f"{int(curr):,}"
         lines.append(f"- Current {lbl}: {val_str}")
         lines.append(f"- {lbl} Growth/Day: {gr:.2f}")
     content = "\n".join(lines)
 
-    # Generate one chart per metric in order
-    attachments = []
-    for m in METRICS:
-        if m in agg.columns:
-            title = f"{LABEL_MAP[m]} by Alliance Over Time"
-            fname = f"{m}.png"
-            attachments.append(plot_series(agg[m], title, fname))
+    # Generate two grid attachments
+    half = len(METRICS)//2
+    att1 = plot_grid(METRICS[:half], agg, 'stats_part1.png')
+    att2 = plot_grid(METRICS[half:], agg, 'stats_part2.png')
+    attachments = [att1, att2]
 
     # Post and record
-    msg_id = post_new(content, attachments)
-    record_last(msg_id)
+    mid = post_new(content, attachments)
+    record_last(mid)
 
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
