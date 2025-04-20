@@ -643,44 +643,70 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
     
-                    # —— SWAP NON‑PENDING ASSIGNEES FOR PENDING LEFTOVERS WITH ≥ ACTIVITY —— 
-    
-                    # (insert right after opt_df is renumbered, before displaying it)
-                    # build a working copy of leftovers
-                    pending_left = leftovers[leftovers['Alliance Status']=='Pending'].copy()
-                    # iterate over non‑pending in the optimal set
-                    for idx, row in opt_df[opt_df['Alliance Status']!='Pending'].iterrows():
-                        # find a pending candidate whose Activity ≥ this row’s Activity
-                        candidate = pending_left[pending_left['Activity'] >= row['Activity']].sort_values('Activity', ascending=False)
-                        if not candidate.empty:
-                            cand = candidate.iloc[0]
-                            # stash the non‑pending info
-                            np_info = row.copy()
-                            # overwrite the optimal slot with the pending cand
-                            for col in ['Ruler Name','Resource 1+2','Alliance','Team',
-                                        'Days Old','Nation Drill Link','Activity','Alliance Status']:
-                                opt_df.at[idx, col] = cand[col]
-                            # remove that pending from leftovers and add the non‑pending back in
-                            pending_left = pending_left.drop(cand.name)
-                            leftovers = leftovers.drop(cand.name).append(np_info, ignore_index=True)
-                    # re‑assign leftovers so it no longer contains duplicates
-                    leftovers = leftovers.drop_duplicates(subset=['Ruler Name']).reset_index(drop=True)
+                    # ——— swap high‑activity pending players into leftovers ———
+                    # (1) recompute original leftovers
+                    assigned = set(opt_df['Ruler Name'])
+                    leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
+                    leftovers = pd.concat([leftover_singles, leftover_opt_singles, leftovers],
+                                           ignore_index=True) \
+                                 .drop_duplicates(subset=['Ruler Name']) \
+                                 .reset_index(drop=True)
                     
-                    # —— DISPLAY OPTIMAL TRADE CIRCLES AND UPDATED LEFTOVERS —— 
-                    # (immediately after the swap logic above)
-                
+                    # (2) identify non‑pending leftovers and pending in opt_df
+                    non_pending = leftovers[leftovers['Alliance Status'] != 'Pending'].copy()
+                    pending_in_opt = opt_df[opt_df['Alliance Status'] == 'Pending'].copy()
+                    
+                    # (3) for each non‑pending leftover, try to swap in a pending with ≥ activity
+                    for _, lp in non_pending.iterrows():
+                        candidates = pending_in_opt[pending_in_opt['Activity'] >= lp['Activity']]
+                        if candidates.empty:
+                            continue
+                        # pick the pending with the **lowest** Activity ≥ the leftover's
+                        cand = candidates.sort_values('Activity').iloc[0]
+                    
+                        # remove the pending from opt_df and remove the non‑pending from leftovers
+                        opt_df = opt_df[opt_df['Ruler Name'] != cand['Ruler Name']]
+                        leftovers = leftovers[leftovers['Ruler Name'] != lp['Ruler Name']]
+                    
+                        # bring the non‑pending into opt_df, preserving circle assignment
+                        new_rec = lp.to_dict()
+                        new_rec['Trade Circle'] = cand['Trade Circle']
+                        opt_df = pd.concat([opt_df, pd.DataFrame([new_rec])], ignore_index=True)
+                    
+                        # send the pending to leftovers
+                        leftovers = pd.concat([leftovers, pd.DataFrame([cand.to_dict()])],
+                                              ignore_index=True)
+                    
+                        # update our pending pool so we don't reuse this one
+                        pending_in_opt = pending_in_opt[pending_in_opt['Ruler Name'] != cand['Ruler Name']]
+                    
+                    # (4) resort and re‑index both tables
+                    opt_df = (
+                        opt_df
+                        .sort_values(['Peace Mode Level','Trade Circle','Ruler Name'],
+                                     key=lambda col: (
+                                         col.map(level_order) if col.name=='Peace Mode Level'
+                                         else col if col.name=='Trade Circle'
+                                         else col.str.lower()
+                                     ))
+                        .reset_index(drop=True)
+                    )
+                    opt_df.index += 1
+                    
+                    leftovers = leftovers.reset_index(drop=True)
+                    leftovers.index = range(1, len(leftovers) + 1)
+
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[
                         "Peace Mode Level","Trade Circle","Ruler Name",
                         "Resource 1+2","Alliance","Team",
                         "Days Old","Nation Drill Link","Activity"
                     ]])
-                
+                    
                     st.markdown("##### Players Left Over")
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
                     else:
-                        leftovers.index = range(1, len(leftovers)+1)
                         st.dataframe(leftovers[[
                             "Ruler Name","Resource 1+2","Alliance","Team",
                             "Days Old","Nation Drill Link","Activity"
