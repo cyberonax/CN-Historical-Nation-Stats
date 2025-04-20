@@ -18,50 +18,14 @@ LABEL_MAP = {
     "nation_count":               "Nation Count",
     "avg_inactivity":             "Avg Inactivity (Days)",
     "Empty Slots Count":          "Total Empty Trade Slots",
-    "%_empty":                    "% of Nations with Empty Slots",
+    "%_empty":                    "% of Nations w/ Empty Slots",
     "Technology":                 "Total Technology",
-    "avg_technology":             "Avg Technology",
     "Infrastructure":             "Total Infrastructure",
-    "avg_infrastructure":         "Avg Infrastructure",
     "Base Land":                  "Total Base Land",
-    "avg_base_land":              "Avg Base Land",
     "Strength":                   "Total Strength",
-    "avg_strength":               "Avg Strength",
     "Attacking Casualties":       "Total Attacking Casualties",
-    "avg_attacking_casualties":   "Avg Attacking Casualties",
-    "Defensive Casualties":       "Total Defensive Casualties",
-    "avg_defensive_casualties":   "Avg Defensive Casualties"
+    "Defensive Casualties":       "Total Defensive Casualties"
 }
-
-# Order for summary and charts
-METRICS = [
-    "nation_count",
-    "avg_inactivity",
-    "Empty Slots Count",
-    "%_empty",
-    "Technology",
-    "avg_technology",
-    "Infrastructure",
-    "avg_infrastructure",
-    "Base Land",
-    "avg_base_land",
-    "Strength",
-    "avg_strength",
-    "Attacking Casualties",
-    "avg_attacking_casualties",
-    "Defensive Casualties",
-    "avg_defensive_casualties"
-]
-
-# Activity mapping and resource columns
-ACTIVITY_MAP = {
-    "Active In The Last 3 Days":        3,
-    "Active This Week":                  7,
-    "Active Last Week":                  14,
-    "Active Three Weeks Ago":            21,
-    "Active More Than Three Weeks Ago":  28
-}
-RESOURCE_COLS = [f"Connected Resource {i}" for i in range(1, 11)]
 
 # FUNCTIONS
 
@@ -75,8 +39,8 @@ def parse_date(fn):
         for dd in (1, 2):
             if md + dd + 4 == len(token):
                 try:
-                    month = int(token[:md]); day = int(token[md:md+dd]); year = int(token[md+dd:])
-                    return datetime(year, month, day, hour)
+                    m_, d_, y_ = int(token[:md]), int(token[md:md+dd]), int(token[md+dd:])
+                    return datetime(y_, m_, d_, hour)
                 except:
                     pass
     return None
@@ -97,165 +61,132 @@ def load_data():
 
 def preprocess(df):
     df = df[df.get("Alliance") == TARGET_ALLIANCE].copy()
-    if df.empty:
-        return df
-    # Numeric conversion
-    num_cols = ["Technology", "Infrastructure", "Base Land", "Strength",
-                "Attacking Casualties", "Defensive Casualties"]
+    # ensure numeric
+    num_cols = ["Technology","Infrastructure","Base Land","Strength",
+                "Attacking Casualties","Defensive Casualties"]
     for c in num_cols:
         if c in df:
-            df[c] = pd.to_numeric(df[c].astype(str).str.replace(",", ""), errors="coerce")
-    # Empty slots
-    df["Empty Slots Count"] = (
-        df[RESOURCE_COLS]
-          .apply(lambda row: sum(1 for v in row if pd.isna(v) or str(v).strip() == ""), axis=1) // 2
-    )
-    # Inactivity
+            df[c] = pd.to_numeric(df[c].astype(str).str.replace(",",""), errors="coerce")
+    # empty slots
+    df["Empty Slots Count"] = df[[f"Connected Resource {i}" for i in range(1,11)]].apply(
+        lambda r: sum(1 for v in r if pd.isna(v) or str(v).strip()==""), axis=1
+    ) // 2
+    # inactivity
     if "Activity" in df:
-        df["avg_inactivity"] = df["Activity"].map(ACTIVITY_MAP)
+        mapping = {"Active In The Last 3 Days":3,"Active This Week":7,
+                   "Active Last Week":14,"Active Three Weeks Ago":21,
+                   "Active More Than Three Weeks Ago":28}
+        df["avg_inactivity"] = df["Activity"].map(mapping)
     return df
 
 
 def aggregate(df):
-    agg = df.groupby("snapshot_date").agg({
-        "Nation ID":             "count",
-        "Technology":            "sum",
-        "Infrastructure":        "sum",
-        "Base Land":             "sum",
-        "Strength":              "sum",
-        "Attacking Casualties":  "sum",
-        "Defensive Casualties":  "sum",
-        "Empty Slots Count":     "sum",
-        "avg_inactivity":        "mean"
-    }).rename(columns={"Nation ID": "nation_count"})
-    # compute averages
-    for base in ["Technology", "Infrastructure", "Base Land", "Strength",
-                 "Attacking Casualties", "Defensive Casualties"]:
-        avg_col = f"avg_{base.lower().replace(' ', '_')}"
-        agg[avg_col] = agg[base] / agg["nation_count"]
+    agg = df.groupby("snapshot_date").agg(
+        nation_count=("Nation ID","count"),
+        Technology=("Technology","sum"),
+        Infrastructure=("Infrastructure","sum"),
+        Base_Land=("Base Land","sum"),
+        Strength=("Strength","sum"),
+        Attacking_Casualties=("Attacking Casualties","sum"),
+        Defensive_Casualties=("Defensive Casualties","sum"),
+        Empty_Slots=("Empty Slots Count","sum"),
+        avg_inactivity=("avg_inactivity","mean")
+    ).sort_index()
+    # compute averages per nation
+    for col in ["Technology","Infrastructure","Base_Land","Strength",
+                "Attacking_Casualties","Defensive_Casualties"]:
+        agg[f"avg_{col}"] = agg[col] / agg["nation_count"]
     # percent empty
-    agg["%_empty"] = (
-        df[df["Empty Slots Count"] > 0]
-          .groupby("snapshot_date")["Nation ID"].count()
-          .reindex(agg.index, fill_value=0) / agg["nation_count"] * 100
-    )
-    return agg.sort_index()
+    total = df.groupby("snapshot_date")["Nation ID"].count()
+    empties = df[df["Empty Slots Count"]>0].groupby("snapshot_date")["Nation ID"].count()
+    agg["%_empty"] = (empties.reindex(agg.index, fill_value=0) / total.reindex(agg.index))*100
+    return agg
 
 
-def growth(series):
-    first, last = series.iloc[0], series.iloc[-1]
-    days = max((series.index[-1] - series.index[0]).days, 1)
-    return (last - first) / days
+def growth(s):
+    first, last = s.iloc[0], s.iloc[-1]
+    days = max((s.index[-1]-s.index[0]).days,1)
+    return (last-first)/days
 
 
-def plot_series(series, title):
-    plt.figure(figsize=(6, 3))
+def plot_series(series, title, fname):
+    plt.figure(figsize=(6,3))
     plt.plot(series.index, series.values, marker="o")
     plt.title(title)
-    plt.xticks(rotation=45, ha="right")
+    plt.xticks(rotation=45,ha="right")
     plt.tight_layout()
-    buf = io.BytesIO(); plt.savefig(buf, format="png"); buf.seek(0); plt.close()
-    return buf
+    buf = io.BytesIO(); plt.savefig(buf,format="png"); buf.seek(0); plt.close()
+    return fname, buf
 
 
-def compute_nation_stats(df):
-    metrics = ["Technology", "Infrastructure", "Base Land", "Strength",
-               "Attacking Casualties", "Defensive Casualties",
-               "Empty Slots Count", "avg_inactivity"]
-    rows = []
-    for (nid, ruler), grp in df.groupby(["Nation ID", "Ruler Name"]):
-        grp = grp.sort_values("snapshot_date")
-        first, last = grp.iloc[0], grp.iloc[-1]
-        days = max((last.snapshot_date - first.snapshot_date).days, 1)
-        row = {"Nation ID": nid, "Ruler Name": ruler}
-        for m in metrics:
-            if m in grp:
-                fv, lv = first[m] or 0, last[m] or 0
-                row[f"{LABEL_MAP.get(m, m)} (current)"] = lv
-                row[f"{LABEL_MAP.get(m, m)} Growth/Day"] = (lv - fv) / days
-        rows.append(row)
-    return pd.DataFrame(rows)
+def plot_multiseries(d, title, fname):
+    plt.figure(figsize=(8,4))
+    for lbl, ser in d.items():
+        plt.plot(ser.index, ser.values, marker="o", label=lbl)
+    plt.title(title)
+    plt.legend()
+    plt.xticks(rotation=45,ha="right")
+    plt.tight_layout()
+    buf = io.BytesIO(); plt.savefig(buf,format="png"); buf.seek(0); plt.close()
+    return fname, buf
 
 
-def delete_last_message():
-    if not Path(LAST_ID_FILE).exists():
-        return
-    msg_id = Path(LAST_ID_FILE).read_text().strip()
-    if msg_id:
-        try:
-            requests.delete(f"{WEBHOOK_URL}/messages/{msg_id}")
-        except:
-            pass
-    Path(LAST_ID_FILE).write_text("")
+def delete_last():
+    if Path(LAST_ID_FILE).exists():
+        mid = Path(LAST_ID_FILE).read_text().strip()
+        if mid:
+            try: requests.delete(f"{WEBHOOK_URL}/messages/{mid}")
+            except: pass
+        Path(LAST_ID_FILE).write_text("")
 
 
-def record_last_id(mid):
-    Path(LAST_ID_FILE).parent.mkdir(parents=True, exist_ok=True)
+def record_last(mid):
+    Path(LAST_ID_FILE).parent.mkdir(parents=True,exist_ok=True)
     Path(LAST_ID_FILE).write_text(mid)
 
 
-def post_new(content, charts, nation_csv):
-    delete_last_message()
-    embeds = [{"image": {"url": f"attachment://{fn}"}} for fn in charts.keys()]
-    payload = {"content": content, "embeds": embeds}
-    files = []
-    for idx, (fn, buf) in enumerate(charts.items()):
-        files.append((f"file{idx}", (fn, buf, "image/png")))
-    files.append((f"file{len(charts)}", ("nation_stats.csv", nation_csv, "text/csv")))
-    resp = requests.post(
-        WEBHOOK_URL + "?wait=true",
-        data={"payload_json": json.dumps(payload)},
-        files=files
-    )
+def post_new(content, attachments):
+    delete_last()
+    embeds=[{"image":{"url":f"attachment://{fn}"}} for fn,_ in attachments]
+    payload={"content":content,"embeds":embeds}
+    files=[(f"file{i}",(fn,buf,"image/png")) for i,(fn,buf) in enumerate(attachments)]
+    resp = requests.post(WEBHOOK_URL+"?wait=true",data={"payload_json":json.dumps(payload)},files=files)
     resp.raise_for_status()
     return resp.json()["id"]
 
 
 def main():
-    df0 = load_data()
-    df = preprocess(df0)
+    df0=load_data(); df=preprocess(df0)
     if df.empty:
-        print(f"No data for {TARGET_ALLIANCE}")
-        return
+        print("No data"); return
+    agg=aggregate(df)
+    latest=agg.iloc[-1]
+    ts=latest.name.strftime("%Y-%m-%d %H:%M")
+    # build summary
+    parts=[f"**Aggregated Stats for {TARGET_ALLIANCE} (snapshot {ts})**"]
+    for k in ["nation_count","avg_inactivity","Empty_Slots","%_empty"]:
+        if k in agg.columns:
+            val=latest[k]; g=growth(agg[k])
+            lbl=LABEL_MAP.get(k,k)
+            parts.append(f"- Current {lbl}: {val:.2f}" if isinstance(val,float) else f"- Current {lbl}: {int(val):,}")
+            parts.append(f"- {lbl} Growth/Day: {g:.2f}")
+    content="\n".join(parts)
+    # attachments: charts
+    atts=[]
+    # single metric charts
+    for key in ["nation_count","%_empty","avg_inactivity"]:
+        fname=f"{key}.png"
+        atts.append(plot_series(agg[key],f"{LABEL_MAP[key]} over time",fname))
+    # multi-series charts
+    atts.append(plot_multiseries({
+        "Tech":agg["Technology"],"Infra":agg["Infrastructure"],
+        "Base Land":agg["Base_Land"],"Strength":agg["Strength"]
+    },"Totals over time","totals.png"))
+    atts.append(plot_multiseries({
+        "Attacking":agg["Attacking_Casualties"],"Defensive":agg["Defensive_Casualties"]
+    },"Casualties over time","casualties.png"))
+    # post
+    msg_id=post_new(content,atts)
+    record_last(msg_id)
 
-    agg = aggregate(df)
-    latest = agg.iloc[-1]
-    ts = latest.name.strftime("%Y-%m-%d %H:%M")
-
-    # Build summary
-    lines = [f"**Aggregated Stats for {TARGET_ALLIANCE} (snapshot {ts})**"]
-    for m in METRICS:
-        if m not in agg.columns:
-            continue
-        curr = latest[m]
-        gr = growth(agg[m])
-        lbl = LABEL_MAP[m]
-        if pd.isna(curr):
-            continue
-        if isinstance(curr, float):
-            lines.append(f"- Current {lbl}: {curr:.2f}")
-        else:
-            lines.append(f"- Current {lbl}: {int(curr):,}")
-        lines.append(f"- {lbl} Growth/Day: {gr:.2f}")
-    content = "\n".join(lines)
-
-    # Generate charts for all metrics
-    charts = {}
-    for m in METRICS:
-        if m in agg.columns:
-            fname = m.lower().replace(' ', '_') + '.png'
-            title = f"{TARGET_ALLIANCE} — {LABEL_MAP[m]}"
-            charts[fname] = plot_series(agg[m], title)
-
-    # Compute and serialize nation-level stats
-    nation_df = compute_nation_stats(df)
-    buf = io.BytesIO()
-    nation_df.to_csv(buf, index=False)
-    buf.seek(0)
-
-    # Post to Discord (delete old, send new)
-    new_id = post_new(content, charts, buf)
-    record_last_id(new_id)
-
-if __name__ == "__main__":
-    main()
+if __name__=="__main__": main()
