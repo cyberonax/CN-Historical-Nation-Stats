@@ -659,11 +659,26 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     # (b) if you need just the pending ones:
                     pending_leftovers = leftovers[leftovers['Alliance Status']=='Pending'].copy()
                     
-                    # (c) find non‑pending leftovers & pending in opt_df
-                    non_pending = leftovers[leftovers['Alliance Status'] != 'Pending']
-                    pending_in_opt = opt_df[opt_df['Alliance Status']=='Pending']
-                    
-                    # (d) re‑sort & re‑index opt_df and leftovers
+                    # (c) *** perform the swaps ***
+                    for _, lp in non_pending.iterrows():
+                        candidates = pending_in_opt[pending_in_opt['Activity'] >= lp['Activity']]
+                        if candidates.empty:
+                            continue
+                        cand = candidates.sort_values('Activity').iloc[0]
+                
+                        opt_df    = opt_df[opt_df['Ruler Name'] != cand['Ruler Name']]
+                        leftovers = leftovers[leftovers['Ruler Name'] != lp['Ruler Name']]
+                
+                        new_rec = lp.to_dict()
+                        new_rec['Trade Circle'] = cand['Trade Circle']
+                        opt_df = pd.concat([opt_df, pd.DataFrame([new_rec])], ignore_index=True)
+                
+                        leftovers = pd.concat([leftovers, pd.DataFrame([cand.to_dict()])],
+                                              ignore_index=True)
+                
+                        pending_in_opt = pending_in_opt[pending_in_opt['Ruler Name'] != cand['Ruler Name']]
+                
+                    # (d) re‑sort & re‑index both tables
                     opt_df = (
                         opt_df
                         .sort_values(
