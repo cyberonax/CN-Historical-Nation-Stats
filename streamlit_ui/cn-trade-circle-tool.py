@@ -9,6 +9,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 import io
 import streamlit.components.v1 as components
+import pulp
 
 st.set_page_config(layout="wide")
 
