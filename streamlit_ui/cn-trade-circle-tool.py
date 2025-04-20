@@ -670,37 +670,35 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             # update pending pool so we don’t reuse the same one
                             pending_in_opt = pending_in_opt[pending_in_opt["Ruler Name"] != p_row["Ruler Name"]]
         
-                    st.markdown("##### Optimal Trade Circles")
-                    st.dataframe(opt_df[[ 
-                        "Peace Mode Level","Trade Circle","Ruler Name",
-                        "Resource 1+2","Alliance","Team",
-                        "Days Old","Nation Drill Link","Activity"
-                    ]])
-        
-                    # —— updated Players Left Over —— 
-                    # original unmatched from final_df
-                    assigned = set(opt_df['Ruler Name'])
-                    leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-    
-                    # include the pre‑optimization singles and opt_df singles
-                    leftovers = pd.concat([
-                        leftover_singles, 
-                        leftover_opt_singles, 
-                        leftovers
-                    ], ignore_index=True)
-    
-                    # —— NEW: remove any duplicate rows by Ruler Name ——
-                    leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
-                    st.markdown("##### Players Left Over")
-                    
-                    if leftovers.empty:
-                        st.markdown("_No unmatched players remain._")
-                    else:
-                        leftovers.index = range(1, len(leftovers)+1)
-                        st.dataframe(leftovers[[
-                            "Ruler Name","Resource 1+2","Alliance","Team",
-                            "Days Old","Nation Drill Link","Activity"
-                        ]])
+                            opt_df = opt_df.sort_values(
+                                ["Peace Mode Level","Trade Circle","Ruler Name"], 
+                                key=lambda col: (
+                                    col.map(level_order) if col.name=="Peace Mode Level" 
+                                    else col if col.name=="Trade Circle" 
+                                    else col.str.lower()
+                                )
+                            ).reset_index(drop=True)
+                            opt_df.index += 1
+                            
+                            st.markdown("##### Optimal Trade Circles")
+                            st.dataframe(opt_df[[ 
+                                "Peace Mode Level","Trade Circle","Ruler Name",
+                                "Resource 1+2","Alliance","Team",
+                                "Days Old","Nation Drill Link","Activity"
+                            ]])
+                            
+                            # now the leftover table
+                            leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
+                            if not leftovers.empty:
+                                leftovers.index = range(1, len(leftovers)+1)
+                                st.markdown("##### Players Left Over")
+                                st.dataframe(leftovers[[
+                                    "Ruler Name","Resource 1+2","Alliance","Team",
+                                    "Days Old","Nation Drill Link","Activity"
+                                ]])
+                            else:
+                                st.markdown("##### Players Left Over")
+                                st.markdown("_No unmatched players remain._")
 
         # ——— Assign Peacetime Recommended Resources ———
         with st.expander("Assign Peacetime Recommended Resources"):
