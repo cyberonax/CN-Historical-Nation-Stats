@@ -11,14 +11,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Restore the last message ID so delete_last_message() can find it
+      # 1) Restore the last‐message ID from cache so delete_last() can remove it
       - name: 🔄 Restore last_msg_id
         uses: actions/cache@v3
         with:
           path: .github/scripts/last_msg_id.txt
           key: discord-last-msg
 
-      # 2) Checkout your code
+      # 2) Check out the repo
       - name: 🛎 Checkout code
         uses: actions/checkout@v3
 
@@ -29,19 +29,20 @@ jobs:
           python-version: '3.10'
 
       # 4) Install dependencies
-      - name: 📦 Install dependencies
+      - name: 📦 Install Python packages
         run: |
           python -m pip install --upgrade pip
           python -m pip install pandas matplotlib requests
 
-      # 5) Run your script (which now deletes old + posts new)
-      - name: 📊 Compute & refresh Discord post
+      # 5) Run the compute_and_notify script
+      - name: 📊 Compute & post stats to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: python .github/scripts/compute_and_notify.py
+        run: |
+          python .github/scripts/compute_and_notify.py
 
-      # 6) Save the new last_msg_id so the next run can delete it
-      - name: 💾 Cache updated last_msg_id
+      # 6) Cache the new last_msg_id so next run can pick it up
+      - name: 💾 Cache last_msg_id
         uses: actions/cache@v3
         with:
           path: .github/scripts/last_msg_id.txt
