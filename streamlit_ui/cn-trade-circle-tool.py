@@ -355,13 +355,35 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
             # — if user left it blank, use the 'details' table to auto-build circles of 6 —
             if tc_df.empty:
-                st.info("No manual Trade Circles provided; defaulting to all eligible nations from ‘Nation Details’ in groups of 6.")
-                tmp = details.copy()[[
-                    "Ruler Name","Resource 1+2","Alliance","Team",
-                    "Days Old","Nation Drill Link","Activity"
-                ]].reset_index(drop=True)
+                st.info("No manual Trade Circles provided; defaulting to all alliance members (including Pending) in groups of 6.")
+                # start from latest_snapshot so Pending shows up
+                tmp = latest_snapshot.copy()
+                tmp["Resource 1+2"]    = tmp.apply(get_resource_1_2, axis=1)
+                tmp["Created"]         = pd.to_datetime(tmp["Created"], errors="coerce")
+                tmp["Days Old"]        = (pd.Timestamp.now() - tmp["Created"]).dt.days
+                tmp["Nation Drill Link"]= (
+                    "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
+                    + tmp["Nation ID"].astype(str)
+                )
+                # map in the same Activity metric
+                tmp["Activity"] = tmp["Ruler Name"] \
+                    .map(avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"])
+                # filter to this alliance, team & under‐14‑day activity
+                tmp = tmp[
+                    (tmp["Alliance"] == selected_alliance) &
+                    (tmp["Team"]     == majority_team) &
+                    (tmp["Activity"] < 14)
+                ].reset_index(drop=True)
+            
+                # assign circles of 6
                 tmp["Trade Circle"] = (tmp.index // 6) + 1
-                tc_df = tmp
+            
+                # carry through Alliance Status for swap logic
+                tc_df = tmp[[
+                    "Trade Circle","Ruler Name","Resource 1+2",
+                    "Alliance","Team","Days Old","Nation Drill Link",
+                    "Activity","Alliance Status"
+                ]]
 
             # — if after fallback it’s still empty, warn and bail —
             if tc_df.empty:
