@@ -554,23 +554,25 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     import pulp
                 except ImportError:
                     st.error("🚨 *PuLP* is not installed. Add `pulp` to your dependencies and redeploy.")
+                    return   # ← bail out so nothing below tries to use undefined opt_df
                 else:
                     import math
 
+                    # 1) build optimal_records
                     optimal_records = []
                     for level in ['Level A', 'Level B', 'Level C']:
                         df_lvl = final_df[final_df['Peace Mode Level'] == level].copy()
                         if df_lvl.empty:
                             continue
 
-                        nations      = df_lvl['Ruler Name'].tolist()
-                        orig_circle  = dict(zip(nations, df_lvl['Trade Circle']))
-                        existing_cs  = sorted(df_lvl['Trade Circle'].unique())
-                        total_n      = len(nations)
-                        needed       = math.ceil(total_n / 6)
-                        max_exist    = existing_cs[-1] if existing_cs else 0
-                        new_cs_count = max(needed - len(existing_cs), 0)
-                        all_cs       = existing_cs + list(range(max_exist+1, max_exist+1+new_cs_count))
+                        nations     = df_lvl['Ruler Name'].tolist()
+                        orig_circle = dict(zip(nations, df_lvl['Trade Circle']))
+                        existing_cs = sorted(df_lvl['Trade Circle'].unique())
+                        total_n     = len(nations)
+                        needed      = math.ceil(total_n / 6)
+                        max_exist   = existing_cs[-1] if existing_cs else 0
+                        new_cs      = needed - len(existing_cs)
+                        all_cs      = existing_cs + list(range(max_exist+1, max_exist+1+new_cs))
 
                         prob = pulp.LpProblem(f"TradeCircle_{level}", pulp.LpMaximize)
                         x = pulp.LpVariable.dicts("x", ((p,c) for p in nations for c in all_cs), cat='Binary')
@@ -584,10 +586,11 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                                 prob += x[p,c] <= y[c]
                         prob += pulp.lpSum(y[c] for c in all_cs) <= needed
 
-                        flow = pulp.lpSum(x[p,c] for p in nations for c in all_cs)
-                        penal = pulp.lpSum(y[c] for c in all_cs)
+                        flow   = pulp.lpSum(x[p,c] for p in nations for c in all_cs)
+                        penal  = pulp.lpSum(y[c]   for c in all_cs)
                         reassign = pulp.lpSum(
-                            x[p,c] * (0 if c==orig_circle[p] else (1 if c in existing_cs else 6))
+                            x[p,c] * (0 if c == orig_circle[p]
+                                      else (1 if c in existing_cs else 6))
                             for p in nations for c in all_cs
                         )
                         prob += 1000*flow - 10*penal - reassign
@@ -596,15 +599,16 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         for p in nations:
                             for c in all_cs:
                                 if pulp.value(x[p,c]) == 1:
-                                    row = df_lvl[df_lvl['Ruler Name']==p].iloc[0].to_dict()
+                                    row = df_lvl[df_lvl['Ruler Name'] == p].iloc[0].to_dict()
                                     row['Trade Circle'] = int(c)
                                     optimal_records.append(row)
                                     break
-        
-                    # build opt_df
+
+                    # 2) build opt_df from the solved records
+                    opt_df = pd.DataFrame(optimal_records)
                     renumbered = []
                     for lvl, grp in opt_df.groupby('Peace Mode Level', sort=False):
-                        ids   = sorted(grp['Trade Circle'].unique())
+                        ids    = sorted(grp['Trade Circle'].unique())
                         id_map = {old:new for new,old in enumerate(ids,1)}
                         tmp    = grp.copy()
                         tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
