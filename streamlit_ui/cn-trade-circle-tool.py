@@ -609,46 +609,30 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
 
-                    # 1) build initial leftovers (from final_df vs opt_df) and include any singles
-                    assigned       = set(opt_df['Ruler Name'])
-                    leftovers      = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-                    leftovers      = pd.concat([leftover_singles, leftover_opt_singles, leftovers], ignore_index=True)
-                    leftovers      = leftovers.drop_duplicates(subset=['Ruler Name']).reset_index(drop=True)
-                    
-                    # 2) pull out non‑Pending leftovers and Pending assigned players
-                    nonpending_left = leftovers[leftovers['Alliance Status'] != 'Pending'].copy()
-                    pending_assigned = opt_df[opt_df['Alliance Status'] == 'Pending'].copy()
-                    
-                    # 3) for each non‑Pending leftover, see if any pending‐assigned has Activity > theirs
-                    for _, np_row in nonpending_left.iterrows():
-                        np_act = np_row['Activity']
-                        # find candidates in circle with strictly higher inactivity
-                        cands = pending_assigned[pending_assigned['Activity'] > np_act]
-                        if cands.empty:
-                            continue
-                        # pick the Pending with the largest gap
-                        cand = cands.loc[cands['Activity'].idxmax()]
-                    
-                        # remove that Pending from opt_df
-                        opt_idx = opt_df[
-                            (opt_df['Ruler Name'] == cand['Ruler Name']) &
-                            (opt_df['Trade Circle'] == cand['Trade Circle'])
-                        ].index
-                        opt_df = opt_df.drop(opt_idx)
-                    
-                        # insert the non‑Pending leftover into the same circle
-                        new_rec = np_row.to_dict()
-                        new_rec['Trade Circle'] = cand['Trade Circle']
-                        opt_df = pd.concat([opt_df, pd.DataFrame([new_rec])], ignore_index=True)
-                    
-                        # remove the non‑Pending from leftovers, add the Pending there
-                        leftovers = leftovers[leftovers['Ruler Name'] != np_row['Ruler Name']]
-                        leftovers = pd.concat([leftovers, pd.DataFrame([cand.to_dict()])], ignore_index=True)
-                    
-                        # update pending_assigned so we don’t reuse this same Pending
-                        pending_assigned = pending_assigned[pending_assigned['Ruler Name'] != cand['Ruler Name']]
-                    
-                    # 4) re‑sort and re‑index before display
+                    # —— NEW: move any 1‑member circles from opt_df into leftovers too ——
+                    # identify single‑nation circles in the optimized result
+                    opt_counts = opt_df.groupby(['Peace Mode Level', 'Trade Circle']).size()
+                    opt_singles = opt_counts[opt_counts == 1].reset_index()[['Peace Mode Level','Trade Circle']]
+    
+                    if not opt_singles.empty:
+                        # extract them
+                        mask = opt_df.set_index(['Peace Mode Level','Trade Circle']).index.isin(
+                            list(opt_singles.itertuples(index=False, name=None))
+                        )
+                        leftover_opt_singles = opt_df[mask].copy()
+                        opt_df = opt_df[~mask].copy()
+                    else:
+                        leftover_opt_singles = pd.DataFrame(columns=opt_df.columns)
+    
+                    # re‑number any remaining circles in opt_df
+                    renumbered = []
+                    for lvl, grp in opt_df.groupby('Peace Mode Level', sort=False):
+                        ids = sorted(grp['Trade Circle'].unique())
+                        id_map = {old:new for new,old in enumerate(ids,1)}
+                        tmp = grp.copy()
+                        tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
+                        renumbered.append(tmp)
+                    opt_df = pd.concat(renumbered, ignore_index=True)
                     opt_df = opt_df.sort_values(
                         ['Peace Mode Level','Trade Circle','Ruler Name'],
                         key=lambda col: (
@@ -658,11 +642,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         )
                     ).reset_index(drop=True)
                     opt_df.index += 1
-                    
-                    leftovers = leftovers.sort_values(
-                        'Ruler Name'
-                    ).reset_index(drop=True)
-                    leftovers.index += 1
     
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[ 
