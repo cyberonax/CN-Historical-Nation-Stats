@@ -447,7 +447,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
         
                 final_records = []
         
-                # build full circles per level, dissolving the most-empty incomplete circles first
+                # build full circles per level, dissolving the most‑empty incomplete circles first
                 for level in ['Level A', 'Level B', 'Level C']:
                     lvl_base = pm_base[pm_base['Peace Mode Level'] == level].copy()
                     lvl_un   = pm_unmatched[pm_unmatched['Peace Mode Level'] == level].copy()
@@ -459,7 +459,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             on='Ruler Name', how='left'
                         )
         
-                    # push Pending to bottom so non-pending fill first
+                    # push Pending to bottom so non‑pending fill first
                     if lvl_un['Alliance Status'].notna().any():
                         lvl_un = lvl_un.sort_values(
                             by='Alliance Status',
@@ -499,7 +499,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     for _, row in lvl_base.iterrows():
                         final_records.append(row.to_dict())
         
-                    # 6) form brand-new full circles of 6
+                    # 6) form brand‑new full circles of 6
                     max_id      = int(lvl_base['Trade Circle'].max()) if not lvl_base.empty else 0
                     next_circle = max_id + 1
                     while len(lvl_un) >= 6:
@@ -524,10 +524,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 level_order = {'Level A':0, 'Level B':1, 'Level C':2}
                 final_df = final_df.sort_values(
                     ['Peace Mode Level','Trade Circle','Ruler Name'],
-                    key=lambda col: col.map(level_order) if col.name=='Peace Mode Level' else col
+                    key=lambda col: col.map(level_order) if col.name == 'Peace Mode Level' else col
                 ).reset_index(drop=True)
                 final_df.index += 1
-
+        
                 # —— NEW: pull out any 1‑member circles as "singles" ——
                 counts = final_df.groupby('Trade Circle').size()
                 single_circles = counts[counts == 1].index.tolist()
@@ -536,7 +536,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     final_df = final_df[~final_df['Trade Circle'].isin(single_circles)].copy()
                 else:
                     leftover_singles = pd.DataFrame(columns=final_df.columns)
-                
+        
                 # now optimize with PuLP (unchanged) …
                 try:
                     import pulp
@@ -544,13 +544,13 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     st.error("🚨 *PuLP* is not installed. Add `pulp` to your dependencies and redeploy.")
                 else:
                     import math
-
+        
                     optimal_records = []
                     for level in ['Level A', 'Level B', 'Level C']:
                         df_lvl = final_df[final_df['Peace Mode Level'] == level].copy()
                         if df_lvl.empty:
                             continue
-
+        
                         nations      = df_lvl['Ruler Name'].tolist()
                         orig_circle  = dict(zip(nations, df_lvl['Trade Circle']))
                         existing_cs  = sorted(df_lvl['Trade Circle'].unique())
@@ -559,11 +559,11 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         max_exist    = existing_cs[-1] if existing_cs else 0
                         new_cs_count = max(needed - len(existing_cs), 0)
                         all_cs       = existing_cs + list(range(max_exist+1, max_exist+1+new_cs_count))
-
+        
                         prob = pulp.LpProblem(f"TradeCircle_{level}", pulp.LpMaximize)
                         x = pulp.LpVariable.dicts("x", ((p,c) for p in nations for c in all_cs), cat='Binary')
                         y = pulp.LpVariable.dicts("y", all_cs, cat='Binary')
-
+        
                         for p in nations:
                             prob += pulp.lpSum(x[p,c] for c in all_cs) == 1
                         for c in all_cs:
@@ -571,64 +571,30 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             for p in nations:
                                 prob += x[p,c] <= y[c]
                         prob += pulp.lpSum(y[c] for c in all_cs) <= needed
-
+        
                         flow = pulp.lpSum(x[p,c] for p in nations for c in all_cs)
                         penal = pulp.lpSum(y[c] for c in all_cs)
                         reassign = pulp.lpSum(
-                            x[p,c] * (0 if c==orig_circle[p] else (1 if c in existing_cs else 6))
+                            x[p,c] * (0 if c == orig_circle[p] else (1 if c in existing_cs else 6))
                             for p in nations for c in all_cs
                         )
                         prob += 1000*flow - 10*penal - reassign
                         prob.solve(pulp.PULP_CBC_CMD(msg=False))
-
+        
                         for p in nations:
                             for c in all_cs:
                                 if pulp.value(x[p,c]) == 1:
-                                    row = df_lvl[df_lvl['Ruler Name']==p].iloc[0].to_dict()
+                                    row = df_lvl[df_lvl['Ruler Name'] == p].iloc[0].to_dict()
                                     row['Trade Circle'] = int(c)
                                     optimal_records.append(row)
                                     break
         
-                    # build opt_df
+                    # build opt_df, renumber and sort
                     opt_df = pd.DataFrame(optimal_records)
                     renumbered = []
                     for lvl, grp in opt_df.groupby('Peace Mode Level', sort=False):
                         ids = sorted(grp['Trade Circle'].unique())
-                        id_map = {old:new for new,old in enumerate(ids,1)}
-                        tmp = grp.copy(); tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
-                        renumbered.append(tmp)
-                    opt_df = pd.concat(renumbered, ignore_index=True)
-        
-                    opt_df = opt_df.sort_values(
-                        ['Peace Mode Level','Trade Circle','Ruler Name'],
-                        key=lambda col: (
-                            col.map(level_order) if col.name=='Peace Mode Level'
-                            else col if col.name=='Trade Circle'
-                            else col.str.lower()
-                        )
-                    ).reset_index(drop=True)
-                    opt_df.index += 1
-
-                    # —— NEW: move any 1‑member circles from opt_df into leftovers too ——
-                    # identify single‑nation circles in the optimized result
-                    opt_counts = opt_df.groupby(['Peace Mode Level', 'Trade Circle']).size()
-                    opt_singles = opt_counts[opt_counts == 1].reset_index()[['Peace Mode Level','Trade Circle']]
-    
-                    if not opt_singles.empty:
-                        # extract them
-                        mask = opt_df.set_index(['Peace Mode Level','Trade Circle']).index.isin(
-                            list(opt_singles.itertuples(index=False, name=None))
-                        )
-                        leftover_opt_singles = opt_df[mask].copy()
-                        opt_df = opt_df[~mask].copy()
-                    else:
-                        leftover_opt_singles = pd.DataFrame(columns=opt_df.columns)
-    
-                    # re‑number any remaining circles in opt_df
-                    renumbered = []
-                    for lvl, grp in opt_df.groupby('Peace Mode Level', sort=False):
-                        ids = sorted(grp['Trade Circle'].unique())
-                        id_map = {old:new for new,old in enumerate(ids,1)}
+                        id_map = {old: new for new, old in enumerate(ids, 1)}
                         tmp = grp.copy()
                         tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
                         renumbered.append(tmp)
@@ -636,44 +602,64 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     opt_df = opt_df.sort_values(
                         ['Peace Mode Level','Trade Circle','Ruler Name'],
                         key=lambda col: (
-                            col.map(level_order) if col.name=='Peace Mode Level'
-                            else col if col.name=='Trade Circle'
+                            col.map(level_order) if col.name == 'Peace Mode Level'
+                            else col if col.name == 'Trade Circle'
                             else col.str.lower()
                         )
                     ).reset_index(drop=True)
                     opt_df.index += 1
-    
+        
+                    # —— Display Optimal Trade Circles ——
                     st.markdown("##### Optimal Trade Circles")
-                    st.dataframe(opt_df[[ 
+                    st.dataframe(opt_df[[
                         "Peace Mode Level","Trade Circle","Ruler Name",
                         "Resource 1+2","Alliance","Team",
                         "Days Old","Nation Drill Link","Activity"
-                    ]])
+                    ]], use_container_width=True)
         
-                    # —— updated Players Left Over —— 
-                    # original unmatched from final_df
+                    # —— Build raw leftovers ——
                     assigned = set(opt_df['Ruler Name'])
-                    leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-    
-                    # include the pre‑optimization singles and opt_df singles
-                    leftovers = pd.concat([
-                        leftover_singles, 
-                        leftover_opt_singles, 
-                        leftovers
-                    ], ignore_index=True)
-    
-                    # —— NEW: remove any duplicate rows by Ruler Name ——
-                    leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
+                    raw_leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
+                    leftovers = pd.concat(
+                        [leftover_singles, leftover_opt_singles, raw_leftovers],
+                        ignore_index=True
+                    )
+        
+                    # —— Swap non-pending with pending when possible ——
+                    if not leftovers.empty:
+                        # ensure Alliance Status present
+                        leftovers = leftovers.merge(
+                            details[['Ruler Name','Alliance Status']],
+                            on='Ruler Name', how='left'
+                        )
+                        non_pending = leftovers[leftovers['Alliance Status'] != 'Pending'].copy()
+                        pending     = leftovers[leftovers['Alliance Status'] == 'Pending'].copy()
+        
+                        swapped, drop_idxs = [], []
+                        for idx, np_row in non_pending.iterrows():
+                            candidates = pending[pending['Activity'] >= np_row['Activity']]
+                            if not candidates.empty:
+                                best = candidates['Activity'].idxmax()
+                                swapped.append(pending.loc[best])
+                                drop_idxs.append(idx)
+                                pending = pending.drop(best)
+        
+                        remaining_np = non_pending.drop(drop_idxs)
+                        leftovers = pd.concat(
+                            [remaining_np, pending, pd.DataFrame(swapped)],
+                            ignore_index=True
+                        ).drop_duplicates(subset=['Ruler Name']).reset_index(drop=True)
+        
+                    # —— Display Players Left Over ——
                     st.markdown("##### Players Left Over")
-                    
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
                     else:
-                        leftovers.index = range(1, len(leftovers)+1)
+                        leftovers.index = range(1, len(leftovers) + 1)
                         st.dataframe(leftovers[[
                             "Ruler Name","Resource 1+2","Alliance","Team",
                             "Days Old","Nation Drill Link","Activity"
-                        ]])
+                        ]], use_container_width=True)
 
         # ——— Assign Peacetime Recommended Resources ———
         with st.expander("Assign Peacetime Recommended Resources"):
