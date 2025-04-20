@@ -578,17 +578,41 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         )
                     ).reset_index(drop=True)
                     opt_df.index += 1
-                    
-                    # —— NEW: remove any single‑nation circles from opt_df into singles_df —— 
-                    counts_opt = opt_df.groupby('Trade Circle').size()
-                    single_cs  = counts_opt[counts_opt == 1].index.tolist()
-                    if single_cs:
-                        singles_df = opt_df[opt_df['Trade Circle'].isin(single_cs)].copy()
-                        opt_df     = opt_df[~opt_df['Trade Circle'].isin(single_cs)].copy()
-                    else:
-                        singles_df = pd.DataFrame(columns=opt_df.columns)
+
+                    # —— NEW: move any 1‑member circles from opt_df into leftovers too ——
+                    # identify single‑nation circles in the optimized result
+                    opt_counts = opt_df.groupby(['Peace Mode Level', 'Trade Circle']).size()
+                    opt_singles = opt_counts[opt_counts == 1].reset_index()[['Peace Mode Level','Trade Circle']]
     
-                    # now show the true Optimal (no 1‑member circles)
+                    if not opt_singles.empty:
+                        # extract them
+                        mask = opt_df.set_index(['Peace Mode Level','Trade Circle']).index.isin(
+                            list(opt_singles.itertuples(index=False, name=None))
+                        )
+                        leftover_opt_singles = opt_df[mask].copy()
+                        opt_df = opt_df[~mask].copy()
+                    else:
+                        leftover_opt_singles = pd.DataFrame(columns=opt_df.columns)
+    
+                    # re‑number any remaining circles in opt_df
+                    renumbered = []
+                    for lvl, grp in opt_df.groupby('Peace Mode Level', sort=False):
+                        ids = sorted(grp['Trade Circle'].unique())
+                        id_map = {old:new for new,old in enumerate(ids,1)}
+                        tmp = grp.copy()
+                        tmp['Trade Circle'] = tmp['Trade Circle'].map(id_map)
+                        renumbered.append(tmp)
+                    opt_df = pd.concat(renumbered, ignore_index=True)
+                    opt_df = opt_df.sort_values(
+                        ['Peace Mode Level','Trade Circle','Ruler Name'],
+                        key=lambda col: (
+                            col.map(level_order) if col.name=='Peace Mode Level'
+                            else col if col.name=='Trade Circle'
+                            else col.str.lower()
+                        )
+                    ).reset_index(drop=True)
+                    opt_df.index += 1
+    
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[ 
                         "Peace Mode Level","Trade Circle","Ruler Name",
@@ -597,11 +621,16 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ]])
         
                     # —— updated Players Left Over —— 
-                    # 1) anyone not assigned by PuLP
+                    # original unmatched from final_df
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-                    # 2) plus all those single‑nation circles we pulled out
-                    leftovers = pd.concat([singles_df, leftovers], ignore_index=True)
+    
+                    # include the pre‑optimization singles and opt_df singles
+                    leftovers = pd.concat([
+                        leftover_singles, 
+                        leftover_opt_singles, 
+                        leftovers
+                    ], ignore_index=True)
     
                     st.markdown("##### Players Left Over")
                     if leftovers.empty:
