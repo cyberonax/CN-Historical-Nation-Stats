@@ -10,6 +10,7 @@ from scipy.optimize import linear_sum_assignment
 import io
 import streamlit.components.v1 as components
 from collections import Counter
+import pulp
 
 st.set_page_config(layout="wide")
 
@@ -108,6 +109,17 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
                   .encode(tooltip=tooltip)\
                   .properties(width=800, height=400)\
                   .interactive()
+        
+def find_best_match(current, combos):
+    best, score = None, float("inf")
+    for combo in combos:
+        missing = set(combo) - set(current)
+        extra   = set(current) - set(combo)
+        s = len(missing) + len(extra)
+        if s < score:
+            score, best = s, combo
+    return best
+    
     else:
         return line.properties(width=800, height=400).interactive()
 
@@ -612,15 +624,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                     # — 2) Hungarian assignment → rec_df  —
                     rec_records = []
-                    def find_best_match(current, combos):
-                        best, score = None, float("inf")
-                        for combo in combos:
-                            missing = set(combo) - set(current)
-                            extra   = set(current) - set(combo)
-                            s = len(missing) + len(extra)
-                            if s < score:
-                                score, best = s, combo
-                        return best
             
                     valid_combos = {
                         "Level A": [ [r.strip() for r in line.split(",")] for line in peace_a_text.splitlines() if line.strip() ],
@@ -824,21 +827,6 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
             if 'opt_df' not in locals() or opt_df.empty:
                 st.markdown("_No Trade Circles to process. Please add entries in the Input Trade Circles section above._")
             else:
-                import numpy as np
-                from scipy.optimize import linear_sum_assignment
-                from collections import Counter
-        
-                def find_best_match(current, combos):
-                    best, best_score = None, float("inf")
-                    for combo in combos:
-                        missing = set(combo) - set(current)
-                        extra   = set(current) - set(combo)
-                        score   = len(missing) + len(extra)
-                        if score < best_score:
-                            best_score = score
-                            best       = combo
-                    return best
-        
                 # parse War Mode valid 12‑resource combos
                 war_combos = [
                     [r.strip() for r in line.split(",")]
