@@ -152,26 +152,33 @@ def save_msg_id(mid):
     Path(CACHE_FILE).parent.mkdir(parents=True,exist_ok=True)
     Path(CACHE_FILE).write_text(mid)
 
-def send_or_edit(content: str,
-                 charts: dict[str,io.BytesIO],
-                 nation_csv: io.BytesIO) -> str:
-    # embeds for charts
-    embeds=[{"image":{"url":f"attachment://{fn}"}} for fn in charts]
-    payload={"content": content,"embeds":embeds}
-    files=[]
-    # add charts
-    for fn, buf in charts.items():
-        files.append(("file",(fn,buf,"image/png")))
-    # add CSV
-    files.append(("file",("nation_stats.csv",nation_csv,"text/csv")))
+def send_or_edit(content: str, buffers: dict[str, io.BytesIO]) -> str:
+    # Build one embed per chart, referencing the attachment://filename
+    embeds = [{"image": {"url": f"attachment://{fn}"}} for fn in buffers.keys()]
+    payload = {"content": content, "embeds": embeds}
 
-    last=load_msg_id()
-    if last:
-        url=f"{WEBHOOK_URL}/messages/{last}"
-        r=requests.patch(url,data={"payload_json":json.dumps(payload)},files=files)
+    # Now attach each chart under a unique field name: file0, file1, ...
+    files = []
+    for idx, (fn, buf) in enumerate(buffers.items()):
+        field_name = f"file{idx}"
+        files.append((field_name, (fn, buf, "image/png")))
+
+    last_id = load_msg_id()
+    if last_id:
+        url = f"{WEBHOOK_URL}/messages/{last_id}"
+        r = requests.patch(
+            url,
+            data={"payload_json": json.dumps(payload)},
+            files=files
+        )
     else:
-        url=WEBHOOK_URL+"?wait=true"
-        r=requests.post(url,data={"payload_json":json.dumps(payload)},files=files)
+        url = WEBHOOK_URL + "?wait=true"
+        r = requests.post(
+            url,
+            data={"payload_json": json.dumps(payload)},
+            files=files
+        )
+
     r.raise_for_status()
     return r.json()["id"]
 
