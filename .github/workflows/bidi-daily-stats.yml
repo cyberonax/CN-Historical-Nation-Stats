@@ -1,9 +1,7 @@
 name: Bi‑Daily Stats → Discord
 
 on:
-  # Manual trigger
   workflow_dispatch:
-  # Scheduled triggers at 00:05 UTC and 12:05 UTC
   schedule:
     - cron: '5 0 * * *'
     - cron: '5 12 * * *'
@@ -11,40 +9,35 @@ on:
 jobs:
   compute-and-notify:
     runs-on: ubuntu-latest
-
     steps:
-      # 1) Restore the last message ID so it can be deleted
-      - name: 🔄 Restore last_msg_id cache
+      # Restore the last run’s message IDs so we can delete them
+      - name: 🔄 Restore cached message IDs
         uses: actions/cache@v3
         with:
-          path: .github/scripts/last_msg_id.txt
-          key: discord-last-msg-id
+          path: .github/scripts/msg_ids.txt
+          key: discord-msg-ids
 
-      # 2) Checkout repository
       - name: 🛎 Checkout code
         uses: actions/checkout@v3
 
-      # 3) Set up Python 3.10
       - name: 🔧 Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      # 4) Install dependencies
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install pandas matplotlib requests
 
-      # 5) Run compute_and_notify.py (deletes old Discord post, then sends new)
-      - name: 📊 Compute & refresh Discord post
+      - name: 📊 Compute & post stats to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python .github/scripts/compute_and_notify.py
 
-      # 6) Cache the updated last_msg_id for the next run
-      - name: 💾 Cache updated last_msg_id
+      # Cache the new message IDs for next time
+      - name: 💾 Cache updated message IDs
         uses: actions/cache@v3
         with:
-          path: .github/scripts/last_msg_id.txt
-          key: discord-last-msg-id
+          path: .github/scripts/msg_ids.txt
+          key: discord-msg-ids
