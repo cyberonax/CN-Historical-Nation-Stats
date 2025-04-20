@@ -578,25 +578,30 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         )
                     ).reset_index(drop=True)
                     opt_df.index += 1
+                    
+                    counts_opt = opt_df.groupby('Trade Circle').size()
+                    single_cs  = counts_opt[counts_opt == 1].index.tolist()
+                    if single_cs:
+                        singles_df = opt_df[opt_df['Trade Circle'].isin(single_cs)].copy()
+                        st.markdown("##### Optimal Trade Circles")
+                        st.dataframe(opt_df[[
+                            "Peace Mode Level","Trade Circle","Ruler Name",
+                            "Resource 1+2","Alliance","Team",
+                            "Days Old","Nation Drill Link","Activity"
+                        ]])
         
-                    st.markdown("##### Optimal Trade Circles")
-                    st.dataframe(opt_df[[
-                        "Peace Mode Level","Trade Circle","Ruler Name",
-                        "Resource 1+2","Alliance","Team",
-                        "Days Old","Nation Drill Link","Activity"
-                    ]])
-        
-                    # —— updated Players Left Over ——
+                    # —— updated Players Left Over —— 
+                    # 1) anyone not assigned by PuLP
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-    
-                    # include those single‑member circles
-                    leftovers = pd.concat([leftover_singles, leftovers], ignore_index=True)
+                    # 2) plus all those single‑nation circles we pulled out
+                    leftovers = pd.concat([singles_df, leftovers], ignore_index=True)
     
                     st.markdown("##### Players Left Over")
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
                     else:
+                        leftovers.index = range(1, len(leftovers)+1)
                         st.dataframe(leftovers[[
                             "Ruler Name","Resource 1+2","Alliance","Team",
                             "Days Old","Nation Drill Link","Activity"
