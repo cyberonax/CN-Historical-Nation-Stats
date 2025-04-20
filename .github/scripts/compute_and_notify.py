@@ -17,26 +17,26 @@ TARGET_ALLIANCE = "Freehold of The Wolves"
 # Map raw column→friendly label
 LABEL_MAP = {
     "nation_count":        "Nation Count",
+    "Empty Slots Count":   "Total Empty Trade Slots",
+    "avg_inactivity":      "Avg Inactivity (Days)",
     "Technology":          "Total Technology",
     "Infrastructure":      "Total Infrastructure",
     "Base Land":           "Total Base Land",
     "Strength":            "Total Strength",
     "Attacking Casualties":"Total Attacking Casualties",
-    "Defensive Casualties":"Total Defensive Casualties",
-    "Empty Slots Count":   "Total Empty Trade Slots",
-    "avg_inactivity":      "Avg Inactivity (Days)"
+    "Defensive Casualties":"Total Defensive Casualties"
 }
 # The exact sequence of metrics we’ll chart & summarize
 METRICS = [
     "nation_count",
+    "Empty Slots Count",
+    "avg_inactivity",
     "Technology",
     "Infrastructure",
     "Base Land",
     "Strength",
     "Attacking Casualties",
-    "Defensive Casualties",
-    "Empty Slots Count",
-    "avg_inactivity"
+    "Defensive Casualties"
 ]
 # Activity mapping
 ACTIVITY_MAP = {
@@ -103,14 +103,14 @@ def preprocess(df):
 def aggregate(df):
     agg = df.groupby("snapshot_date").agg({
         "Nation ID":             "count",
+        "Empty Slots Count":     "sum",
+        "activity_score":        "mean",
         "Technology":            "sum",
         "Infrastructure":        "sum",
         "Base Land":             "sum",
         "Strength":              "sum",
         "Attacking Casualties":  "sum",
-        "Defensive Casualties":  "sum",
-        "Empty Slots Count":     "sum",
-        "activity_score":        "mean"
+        "Defensive Casualties":  "sum"
     }).rename(columns={
         "Nation ID":      "nation_count",
         "activity_score": "avg_inactivity"
