@@ -718,15 +718,20 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         "Days Old","Nation Drill Link","Activity"
                     ]])
                     
-                    st.markdown("##### Players Left Over")
+                    st.markdown("##### Players Swapped")
+                    if swaps_df.empty:
+                        st.markdown("_No players swapped._")
+                    else:
+                        st.dataframe(
+                            swaps_df[[
+                                "Trade Circle","Swapped In","In Activity",
+                                "Swapped Out","Out Activity"
+                            ]]
+                        )
+                        
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
                     else:
-                        st.dataframe(leftovers[[
-                            "Ruler Name","Resource 1+2","Alliance","Team",
-                            "Days Old","Nation Drill Link","Activity"
-                        ]])
-                    
                     if swap_records:
                         swaps_df = pd.DataFrame(swap_records)
                         swaps_df.index += 1
