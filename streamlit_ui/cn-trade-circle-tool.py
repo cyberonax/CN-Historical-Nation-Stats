@@ -643,61 +643,64 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
                     
+                    # 1) show the optimized circles
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[
                         "Peace Mode Level","Trade Circle","Ruler Name",
                         "Resource 1+2","Alliance","Team",
                         "Days Old","Nation Drill Link","Activity"
-                    ]])
-                    
-                    # —— Build initial leftovers: pre‑opt singles, opt‑singles, and anyone not in opt_df ——
+                    ]], use_container_width=True)
+            
+                    # 2) build initial leftovers (pre‑opt singles, opt‑singles, and unassigned)
                     leftovers = pd.concat([
                         leftover_singles,
                         leftover_opt_singles,
                         final_df[~final_df["Ruler Name"].isin(opt_df["Ruler Name"])]
                     ], ignore_index=True)
-                    
-                    # helper: count matching resources vs the circle’s assigned combo
+            
+                    # helper: how many of a circle’s combo does this player already have?
                     def overlap(res_str, combo_str):
                         res   = {r.strip() for r in res_str.split(",") if r.strip()}
                         combo = {c.strip() for c in combo_str.split(",") if c.strip()}
                         return len(res & combo)
-                    
-                    # —— Swap non‑pending leftovers into circles when they outperform someone —— 
+            
+                    # 3) perform swaps of non‑pending leftovers into circles
                     for _, cand in leftovers[leftovers["Alliance Status"] != "Pending"].iterrows():
                         lvl, circ = cand["Peace Mode Level"], cand["Trade Circle"]
+                        # grab the combo that these circles will use
                         combo_str = opt_df.loc[
                             (opt_df["Peace Mode Level"] == lvl) &
                             (opt_df["Trade Circle"]      == circ),
                             "Assigned Valid Resource Combination"
                         ].iloc[0]
                         cand_ov = overlap(cand["Resource 1+2"], combo_str)
-                    
+            
+                        # the current circle members
                         members = opt_df[
                             (opt_df["Peace Mode Level"] == lvl) &
                             (opt_df["Trade Circle"]      == circ)
                         ].copy()
                         members["overlap"] = members["Resource 1+2"].apply(lambda s: overlap(s, combo_str))
-                    
-                        # find swap candidates:
+            
+                        # find anyone we could swap out:
                         to_swap = members[
                             (
-                                (members["Alliance Status"] == "Pending") &
+                                (members["Alliance Status"] == "Pending") and
                                 (cand["Activity"] < members["Activity"])
                             ) |
                             (cand_ov > members["overlap"])
                         ]
                         if to_swap.empty:
                             continue
-                    
-                        # pick worst pending (highest inactivity) or worst overlap
+            
+                        # prefer the most inactive pending, otherwise worst overlap
                         pending_swaps = to_swap[to_swap["Alliance Status"] == "Pending"]
                         if not pending_swaps.empty:
                             out = pending_swaps.sort_values("Activity", ascending=False).iloc[0]
                         else:
                             out = to_swap.sort_values("overlap").iloc[0]
-                    
-                        # perform swap in opt_df
+            
+                        # swap them in
                         mask = (
                             (opt_df["Peace Mode Level"] == lvl) &
                             (opt_df["Trade Circle"]      == circ) &
@@ -705,16 +708,15 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         )
                         opt_df.loc[mask, ["Ruler Name","Resource 1+2","Alliance Status","Activity"]] = \
                             cand[["Ruler Name","Resource 1+2","Alliance Status","Activity"]].values
-                    
-                        # update leftovers: remove candidate, add swapped‑out member
+            
+                        # update leftovers: remove cand, add swapped‑out
                         leftovers = leftovers[leftovers["Ruler Name"] != cand["Ruler Name"]]
                         leftovers = pd.concat([leftovers, pd.DataFrame([out])], ignore_index=True)
-                    
-                    # —— Finalize leftovers: drop any duplicates and reindex ——
+            
+                    # 4) cleanup & show final leftovers
                     leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
                     leftovers.index += 1
-                    
-                    # —— Display the updated Players Left Over table ——
+            
                     st.markdown("##### Players Left Over")
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
