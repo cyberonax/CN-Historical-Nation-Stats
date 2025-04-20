@@ -1177,7 +1177,7 @@ def main():
                 latest_act.rename(columns={'activity_score':'Current Activity'},inplace=True)
                 avg_activity = avg_activity.merge(latest_act,on='Ruler Name').drop(columns=["Nation ID"])
                 st.markdown("#### All Time Average Days of Inactivity per Nation")
-                st.dataframe(avg_activity[['Ruler Name','Current Activity','All Time Average Days of Inactivity']])
+                st.dataframe(avg_activity.sort_values("All Time Average Days of Inactivity",ascending=False)[['Ruler Name','Current Activity','All Time Average Days of Inactivity']])
     
         # (b) Empty Trade Slots Over Time
         with st.expander("Empty Trade Slots Over Time"):
@@ -1191,7 +1191,18 @@ def main():
             latest_empty.rename(columns={'Empty Slots Count':'Current Empty Trade Slots'},inplace=True)
             avg_empty = avg_empty.merge(latest_empty,on='Ruler Name').drop(columns=["Nation ID"])
             st.markdown("#### All Time Average Empty Trade Slots per Nation")
-            st.dataframe(avg_empty[['Ruler Name','Current Empty Trade Slots','All Time Average Empty Trade Slots']])
+            st.dataframe(avg_empty.sort_values("All Time Average Empty Trade Slots",ascending=False)[['Ruler Name','Current Empty Trade Slots','All Time Average Empty Trade Slots']])
+            # Empty-to-Inactivity Ratio
+            if 'activity_score' in df_indiv.columns:
+                avg_inactivity = df_indiv.dropna(subset=['activity_score']) \
+                    .groupby(["Nation ID","Ruler Name"])['activity_score'] \
+                    .mean() \
+                    .reset_index(name="All Time Average Days of Inactivity") \
+                    .drop(columns=["Nation ID"])
+                avg_ratio = avg_empty.merge(avg_inactivity,on='Ruler Name',how='inner')
+                avg_ratio['Empty-to-Inactivity Ratio'] = avg_ratio['All Time Average Empty Trade Slots'] / avg_ratio['All Time Average Days of Inactivity'].replace(0,None)
+                st.markdown("#### Empty Slots-to-Inactivity Ratio per Nation")
+                st.dataframe(avg_ratio.sort_values('Empty-to-Inactivity Ratio',ascending=False)[['Ruler Name','Empty-to-Inactivity Ratio']])
     
         # (c) Technology Over Time
         if 'Technology' in df_indiv.columns:
