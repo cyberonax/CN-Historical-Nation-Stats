@@ -109,6 +109,8 @@ def altair_individual_metric_chart(df, metric, title, show_hover=True):
                   .encode(tooltip=tooltip)\
                   .properties(width=800, height=400)\
                   .interactive()
+    else:
+        return line.properties(width=800, height=400).interactive()
         
 def find_best_match(current, combos):
     best, score = None, float("inf")
@@ -120,9 +122,6 @@ def find_best_match(current, combos):
             score, best = s, combo
     return best
     
-    else:
-        return line.properties(width=800, height=400).interactive()
-
 ##############################
 # STREAMLIT APP
 ##############################
