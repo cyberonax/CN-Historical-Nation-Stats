@@ -11,14 +11,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Restore any previously recorded message IDs
-      - name: 🔄 Restore previous Discord message IDs
+      # 1) Restore the last message ID so delete_last_message() can find it
+      - name: 🔄 Restore last_msg_id
         uses: actions/cache@v3
         with:
-          path: .github/scripts/all_msg_ids.txt
-          key: discord-msg-ids
+          path: .github/scripts/last_msg_id.txt
+          key: discord-last-msg
 
-      # 2) Check out your code
+      # 2) Checkout your code
       - name: 🛎 Checkout code
         uses: actions/checkout@v3
 
@@ -34,16 +34,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pandas matplotlib requests
 
-      # 5) Compute, chart, delete old posts & post new one
+      # 5) Run your script (which now deletes old + posts new)
       - name: 📊 Compute & refresh Discord post
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          python .github/scripts/compute_and_notify.py
+        run: python .github/scripts/compute_and_notify.py
 
-      # 6) Save the updated list of posted IDs
-      - name: 💾 Cache updated Discord message IDs
+      # 6) Save the new last_msg_id so the next run can delete it
+      - name: 💾 Cache updated last_msg_id
         uses: actions/cache@v3
         with:
-          path: .github/scripts/all_msg_ids.txt
-          key: discord-msg-ids
+          path: .github/scripts/last_msg_id.txt
+          key: discord-last-msg
