@@ -643,33 +643,51 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
     
+                    # —— UPDATED SWAP LOGIC —— 
+                    # 1) rebuild leftovers
+                    assigned = set(opt_df['Ruler Name'])
+                    leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
+                    leftovers = pd.concat(
+                        [leftover_singles, leftover_opt_singles, leftovers],
+                        ignore_index=True
+                    ).drop_duplicates(subset=['Ruler Name']).reset_index(drop=True)
+                
+                    # 2) split non‑pending vs. pending
+                    non_pending = leftovers[leftovers['Alliance Status'] != 'Pending']
+                    pending_only = leftovers[leftovers['Alliance Status'] == 'Pending']
+                
+                    # 3) swap: for each non‑pending, bring in a qualifying pending
+                    to_drop = []
+                    for _, np_row in non_pending.iterrows():
+                        # any pending with activity >= this non-pending?
+                        candidates = pending_only[pending_only['Activity'] >= np_row['Activity']]
+                        if not candidates.empty:
+                            # pick the one with highest activity
+                            cand_idx = candidates['Activity'].idxmax()
+                            # append to opt_df
+                            opt_df = pd.concat([opt_df, pending_only.loc[[cand_idx]]], ignore_index=True)
+                            to_drop.append(cand_idx)
+                
+                    # 4) remove those swapped‑in pending from leftovers
+                    leftovers = leftovers.drop(index=to_drop).reset_index(drop=True)
+                
+                    # —— RENDER TABLES —— 
+                    # optimal circles first
+                    opt_df = opt_df.reset_index(drop=True)
+                    opt_df.index += 1
                     st.markdown("##### Optimal Trade Circles")
-                    st.dataframe(opt_df[[ 
+                    st.dataframe(opt_df[[
                         "Peace Mode Level","Trade Circle","Ruler Name",
                         "Resource 1+2","Alliance","Team",
                         "Days Old","Nation Drill Link","Activity"
                     ]])
-        
-                    # —— updated Players Left Over —— 
-                    # original unmatched from final_df
-                    assigned = set(opt_df['Ruler Name'])
-                    leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-    
-                    # include the pre‑optimization singles and opt_df singles
-                    leftovers = pd.concat([
-                        leftover_singles, 
-                        leftover_opt_singles, 
-                        leftovers
-                    ], ignore_index=True)
-    
-                    # —— NEW: remove any duplicate rows by Ruler Name ——
-                    leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
+                
+                    # then the leftovers
+                    leftovers.index = range(1, len(leftovers)+1)
                     st.markdown("##### Players Left Over")
-                    
                     if leftovers.empty:
-                        st.markdown("_No unmatched players remain._")
+                        st.markdown("_No unmatched players remain after swapping._")
                     else:
-                        leftovers.index = range(1, len(leftovers)+1)
                         st.dataframe(leftovers[[
                             "Ruler Name","Resource 1+2","Alliance","Team",
                             "Days Old","Nation Drill Link","Activity"
