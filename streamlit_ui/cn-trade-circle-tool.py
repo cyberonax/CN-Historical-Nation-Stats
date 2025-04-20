@@ -644,63 +644,38 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     opt_df.index += 1
     
                     # —— SWAP PENDING IN CIRCLES WITH NON‑PENDING LEFTOVERS —— 
+                    
+                    # reset indices so our loc/dropping is stable
+                    opt_df      = opt_df.reset_index(drop=True)
+                    leftovers   = leftovers.reset_index(drop=True)
                 
-                    # rebuild leftovers (as before)
-                    assigned = set(opt_df['Ruler Name'])
-                    leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
-                    leftovers = pd.concat(
-                        [leftover_singles, leftover_opt_singles, leftovers],
-                        ignore_index=True
-                    ).drop_duplicates(subset=['Ruler Name']).reset_index(drop=True)
+                    # identify pools
+                    non_pending     = leftovers[leftovers['Alliance Status'] != 'Pending']
+                    pending_in_opt  = opt_df[opt_df['Alliance Status'] == 'Pending']
                 
-                    # identify candidates
-                    pending_in_circles = opt_df[opt_df['Alliance Status']=='Pending'].copy()
-                    nonpending_left    = leftovers[leftovers['Alliance Status']!='Pending'].copy()
+                    swaps = []
+                    # for each non‑pending leftover, find a pending in opt_df with Activity ≥ theirs
+                    for np_idx, np_row in non_pending.iterrows():
+                        candidates = pending_in_opt[pending_in_opt['Activity'] >= np_row['Activity']]
+                        if not candidates.empty:
+                            # pick the least‑active pending (max inactivity days)
+                            p_idx = candidates['Activity'].idxmax()
+                            swaps.append((np_idx, p_idx))
+                            pending_in_opt = pending_in_opt.drop(p_idx)
                 
-                    # sort so we match best swaps first: 
-                    # pending (lowest activity) → nonpending (highest activity)
-                    pending_in_circles = pending_in_circles.sort_values('Activity', ascending=True)
-                    nonpending_left    = nonpending_left.sort_values('Activity', ascending=False)
+                    # perform all swaps
+                    for np_idx, p_idx in swaps:
+                        new_in = leftovers.loc[[np_idx]]       # non‑pending to bring in
+                        new_out = opt_df.loc[[p_idx]]          # pending to send out
                 
-                    # perform swaps
-                    for _, np_row in nonpending_left.iterrows():
-                        # find first pending whose Activity ≤ this nonpending's
-                        mask = pending_in_circles['Activity'] <= np_row['Activity']
-                        if not mask.any():
-                            continue
-                        p_row = pending_in_circles[mask].iloc[0]
+                        opt_df    = pd.concat([opt_df.drop(p_idx),    new_in],    ignore_index=True)
+                        leftovers = pd.concat([leftovers.drop(np_idx), new_out],   ignore_index=True)
                 
-                        # capture their circle
-                        circle_id = int(p_row['Trade Circle'])
+                    # re‑index
+                    opt_df.index      = range(1, len(opt_df)+1)
+                    leftovers.index   = range(1, len(leftovers)+1)
                 
-                        # remove that pending from opt_df & from our pool
-                        opt_df = opt_df[opt_df['Ruler Name'] != p_row['Ruler Name']]
-                        pending_in_circles = pending_in_circles[pending_in_circles['Ruler Name'] != p_row['Ruler Name']]
-                
-                        # inject the non‑pending into opt_df, in the same circle
-                        new_rec = np_row.to_dict()
-                        new_rec['Trade Circle'] = circle_id
-                        opt_df = pd.concat([opt_df, pd.DataFrame([new_rec])], ignore_index=True)
-                
-                        # remove the non‑pending from leftovers
-                        leftovers = leftovers[leftovers['Ruler Name'] != np_row['Ruler Name']]
-                
-                        # add the kicked‐out pending into leftovers (drop their old Trade Circle)
-                        kicked = p_row.drop('Trade Circle')
-                        leftovers = pd.concat([leftovers, pd.DataFrame([kicked])], ignore_index=True)
-                
-                    # ——— now re‑render both tables ———
-                
-                    # Optimal Trade Circles (renumber & sort)
-                    opt_df = opt_df.sort_values(
-                        ['Peace Mode Level','Trade Circle','Ruler Name'],
-                        key=lambda col: (
-                            col.map(level_order) if col.name=='Peace Mode Level' else col
-                            if col.name=='Trade Circle' else col.str.lower()
-                        )
-                    ).reset_index(drop=True)
-                    opt_df.index += 1
-                
+                    # —— RENDER TABLES —— 
                     st.markdown("##### Optimal Trade Circles")
                     st.dataframe(opt_df[[
                         "Peace Mode Level","Trade Circle","Ruler Name",
@@ -708,13 +683,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         "Days Old","Nation Drill Link","Activity"
                     ]])
                 
-                    # Players Left Over
-                    leftovers = leftovers.reset_index(drop=True)
-                    leftovers.index += 1
-                
                     st.markdown("##### Players Left Over")
                     if leftovers.empty:
-                        st.markdown("_No unmatched players remain._")
+                        st.markdown("_No unmatched players remain after swapping._")
                     else:
                         st.dataframe(leftovers[[
                             "Ruler Name","Resource 1+2","Alliance","Team",
