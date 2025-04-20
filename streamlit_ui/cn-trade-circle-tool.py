@@ -450,6 +450,12 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 # after loop you have final_df:
         
                 final_df = pd.DataFrame(final_records)
+                
+                # — ensure Peace Mode Level column exists —
+                if 'Peace Mode Level' not in final_df.columns:
+                    final_df['Peace Mode Level'] = final_df['Days Old'].apply(peace_level)
+                
+                # now sort
                 level_order = {'Level A':0,'Level B':1,'Level C':2}
                 final_df = final_df.sort_values(
                     ['Peace Mode Level','Trade Circle','Ruler Name'],
