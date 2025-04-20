@@ -642,7 +642,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         )
                     ).reset_index(drop=True)
                     opt_df.index += 1
-    
+
+                    swap_records = []
+                    
                     # ——— rebuild leftovers from final_df + pre‑opt singles ———
                     assigned = set(opt_df['Ruler Name'])
                     leftovers = final_df[~final_df['Ruler Name'].isin(assigned)].copy()
@@ -679,8 +681,15 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         # 3) send the pending candidate into leftovers
                         leftovers = pd.concat([leftovers, pd.DataFrame([cand.to_dict()])],
                                               ignore_index=True)
-                    
-                        # 4) don’t reuse this pending again
+                        # 4) record the swap
+                        swap_records.append({
+                            "Trade Circle":    cand["Trade Circle"],
+                            "Swapped In":      lp["Ruler Name"],
+                            "In Activity":     lp["Activity"],
+                            "Swapped Out":     cand["Ruler Name"],
+                            "Out Activity":    cand["Activity"],
+                        
+                        # 5) don’t reuse this pending again
                         pending_in_opt = pending_in_opt[pending_in_opt['Ruler Name'] != cand['Ruler Name']]
                     
                     # ——— resort & re‑index both tables ———
@@ -715,6 +724,15 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         st.dataframe(leftovers[[
                             "Ruler Name","Resource 1+2","Alliance","Team",
                             "Days Old","Nation Drill Link","Activity"
+                        ]])
+                    
+                    if swap_records:
+                        swaps_df = pd.DataFrame(swap_records)
+                        swaps_df.index += 1
+                        st.markdown("##### Players Swapped")
+                        st.dataframe(swaps_df[[
+                            "Trade Circle","Swapped In","In Activity",
+                            "Swapped Out","Out Activity"
                         ]])
 
         # ——— Assign Peacetime Recommended Resources ———
