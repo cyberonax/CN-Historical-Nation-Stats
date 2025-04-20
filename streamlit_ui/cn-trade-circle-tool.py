@@ -579,16 +579,22 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     ).reset_index(drop=True)
                     opt_df.index += 1
                     
-                    counts_opt = opt_df.groupby('Trade Circle').size()
-                    single_cs  = counts_opt[counts_opt == 1].index.tolist()
-                    if single_cs:
-                        singles_df = opt_df[opt_df['Trade Circle'].isin(single_cs)].copy()
-                        st.markdown("##### Optimal Trade Circles")
-                        st.dataframe(opt_df[[
-                            "Peace Mode Level","Trade Circle","Ruler Name",
-                            "Resource 1+2","Alliance","Team",
-                            "Days Old","Nation Drill Link","Activity"
-                        ]])
+                # —— NEW: remove any single‑nation circles from opt_df into singles_df —— 
+                counts_opt = opt_df.groupby('Trade Circle').size()
+                single_cs  = counts_opt[counts_opt == 1].index.tolist()
+                if single_cs:
+                    singles_df = opt_df[opt_df['Trade Circle'].isin(single_cs)].copy()
+                    opt_df     = opt_df[~opt_df['Trade Circle'].isin(single_cs)].copy()
+                else:
+                    singles_df = pd.DataFrame(columns=opt_df.columns)
+
+                # now show the true Optimal (no 1‑member circles)
+                st.markdown("##### Optimal Trade Circles")
+                st.dataframe(opt_df[[ 
+                    "Peace Mode Level","Trade Circle","Ruler Name",
+                    "Resource 1+2","Alliance","Team",
+                    "Days Old","Nation Drill Link","Activity"
+                ]])
         
                     # —— updated Players Left Over —— 
                     # 1) anyone not assigned by PuLP
