@@ -632,7 +632,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         leftovers
                     ], ignore_index=True)
     
+                    # —— NEW: remove any duplicate rows by Ruler Name ——
+                    leftovers = leftovers.drop_duplicates(subset=["Ruler Name"]).reset_index(drop=True)
                     st.markdown("##### Players Left Over")
+                    
                     if leftovers.empty:
                         st.markdown("_No unmatched players remain._")
                     else:
