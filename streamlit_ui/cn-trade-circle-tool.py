@@ -376,8 +376,17 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     snap["merge_key"]    = snap["Ruler Name"].str.lower()
                     snap["Resource 1+2"] = snap.apply(get_resource_1_2, axis=1)
                     tc_df = tc_df.merge(
-                        snap[["merge_key","Resource 1+2","Alliance","Team","Created","Nation ID"]],
-                        on="merge_key", how="inner"
+                        snap[[
+                            "merge_key",
+                            "Resource 1+2",
+                            "Alliance",
+                            "Team",
+                            "Created",
+                            "Nation ID",
+                            "Alliance Status"
+                        ]],
+                        on="merge_key",
+                        how="inner"
                     )
                     tc_df["Created"] = pd.to_datetime(tc_df["Created"], errors="coerce")
                     tc_df["Days Old"]= (pd.Timestamp.now() - tc_df["Created"]).dt.days
@@ -413,10 +422,11 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 # … rest of the original code for Unmatched … 
 
         # ——— Updated Trade Circles ———
-        # ——— Updated Trade Circles ———
         with st.expander("Updated Trade Circles"):
             if 'tc_df' not in locals() or tc_df.empty:
-                st.markdown("_No Trade Circles to process. Please add entries in the Input Trade Circles section above._")
+                st.markdown(
+                    "_No Trade Circles to process. Please add entries in the Input Trade Circles section above._"
+                )
             else:
                 # helper to assign Peace Mode Level
                 def peace_level(days):
@@ -426,78 +436,81 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         return 'Level B'
                     else:
                         return 'Level C'
-
+        
                 # tag base and unmatched with levels
                 pm_base = tc_df.copy()
-                pm_base['Peace Mode Level']     = pm_base['Days Old'].apply(peace_level)
-                pm_unmatched = details[~details['Ruler Name'].isin(pm_base['Ruler Name'])].copy()
+                pm_base['Peace Mode Level'] = pm_base['Days Old'].apply(peace_level)
+                pm_unmatched = details[
+                    ~details['Ruler Name'].isin(pm_base['Ruler Name'])
+                ].copy()
                 pm_unmatched['Peace Mode Level'] = pm_unmatched['Days Old'].apply(peace_level)
-
+        
                 final_records = []
-
-                # build full circles per level, dissolving the most‐empty incomplete circles first
+        
+                # build full circles per level, dissolving the most-empty incomplete circles first
                 for level in ['Level A', 'Level B', 'Level C']:
                     lvl_base = pm_base[pm_base['Peace Mode Level'] == level].copy()
                     lvl_un   = pm_unmatched[pm_unmatched['Peace Mode Level'] == level].copy()
-
-                    # —— ensure we have Alliance Status on the pool so we can deprioritize Pending —— 
+        
+                    # ensure every pool row has Alliance Status
                     if 'Alliance Status' not in lvl_un.columns:
-                        snapshot_status = latest_snapshot[['Ruler Name', 'Alliance Status']].drop_duplicates()
-                        lvl_un = lvl_un.merge(snapshot_status, on='Ruler Name', how='left')
-    
-                    # —— prioritize non‑pending players in the pool (if any Pending exist) —— 
-                    if 'Pending' in lvl_un['Alliance Status'].values:
+                        lvl_un = lvl_un.merge(
+                            details[['Ruler Name','Alliance Status']],
+                            on='Ruler Name', how='left'
+                        )
+        
+                    # push Pending to bottom so non-pending fill first
+                    if lvl_un['Alliance Status'].notna().any():
                         lvl_un = lvl_un.sort_values(
                             by='Alliance Status',
                             key=lambda col: col.eq('Pending')
                         ).reset_index(drop=True)
                     else:
                         lvl_un = lvl_un.reset_index(drop=True)
-
+        
                     # 1) identify incomplete circles
                     sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
                     incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
-
+        
                     # 2) dissolve all but the one with the fewest empty slots
                     if len(incomplete) > 1:
                         sorted_inc = sorted(incomplete.items(), key=lambda x: x[1])
                         keep_circle = sorted_inc[0][0]
                         dissolve_circles = [c for c, _ in sorted_inc[1:]]
-                        # move dissolved members back to pool
                         to_move = lvl_base[lvl_base['Trade Circle'].isin(dissolve_circles)].copy()
                         lvl_un = pd.concat([lvl_un, to_move], ignore_index=True)
                         lvl_base = lvl_base[~lvl_base['Trade Circle'].isin(dissolve_circles)].copy()
-
+        
                     # 3) recompute incomplete on the remaining circles
                     sizes = lvl_base.groupby('Trade Circle').size() if not lvl_base.empty else pd.Series(dtype=int)
                     incomplete = {c: 6 - cnt for c, cnt in sizes.items() if cnt < 6}
-
-                    # 4) fill the incomplete circles (fewest empty first), drawing from prioritized lvl_un
+        
+                    # 4) fill those incomplete circles (fewest empty first)
                     for circle_id, slots in sorted(incomplete.items(), key=lambda x: x[1]):
                         to_add = min(slots, len(lvl_un))
                         adds   = lvl_un.iloc[:to_add]
-                        lvl_un  = lvl_un.iloc[to_add:]
+                        lvl_un = lvl_un.iloc[to_add:]
                         for _, row in adds.iterrows():
                             rec = row.to_dict()
                             rec['Trade Circle'] = circle_id
                             final_records.append(rec)
-
+        
                     # 5) keep original full members
                     for _, row in lvl_base.iterrows():
                         final_records.append(row.to_dict())
-
-                    # 6) form brand‑new full circles of 6
+        
+                    # 6) form brand-new full circles of 6
                     max_id      = int(lvl_base['Trade Circle'].max()) if not lvl_base.empty else 0
                     next_circle = max_id + 1
                     while len(lvl_un) >= 6:
-                        group   = lvl_un.iloc[:6]
-                        lvl_un  = lvl_un.iloc[6:]
+                        group  = lvl_un.iloc[:6]
+                        lvl_un = lvl_un.iloc[6:]
                         for _, row in group.iterrows():
                             rec = row.to_dict()
                             rec['Trade Circle'] = next_circle
                             final_records.append(rec)
                         next_circle += 1
-
+        
                     # 7) any remaining (<6) go into one last circle
                     if len(lvl_un) > 0:
                         for _, row in lvl_un.iterrows():
@@ -505,7 +518,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             rec['Trade Circle'] = next_circle
                             final_records.append(rec)
                         lvl_un = lvl_un.iloc[0:0]
-
+        
                 # assemble final_df
                 final_df = pd.DataFrame(final_records)
                 level_order = {'Level A':0, 'Level B':1, 'Level C':2}
