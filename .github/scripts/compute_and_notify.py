@@ -8,9 +8,10 @@ import requests
 import matplotlib.pyplot as plt
 
 # CONFIGURATION
+SCRIPT_DIR = Path(__file__).parent.resolve()
+LAST_ID_FILE    = SCRIPT_DIR / "last_msg_id.txt"
 WEBHOOK_URL     = os.environ['DISCORD_WEBHOOK_URL']
 ZIP_FOLDER      = "downloaded_zips"
-LAST_ID_FILE    = ".github/scripts/last_msg_id.txt"
 TARGET_ALLIANCE = "Freehold of The Wolves"
 
 # Mapping column names to friendly labels
