@@ -360,7 +360,7 @@ def main():
         st.sidebar.header("Alliance Metrics")
         alliances = sorted(df_raw['Alliance'].dropna().unique())
         # Compute the intersection of default selections with the available alliances.
-        default_defaults = ["Freehold of The Wolves", "CLAWS", "NATO"]
+        default_defaults = ["Freehold of The Wolves", "CLAWS", "NATO", "Doom Squad"]
         default_selection = [a for a in default_defaults if a in alliances]
         selected_alliances = st.sidebar.multiselect("Filter by Alliance", options=alliances, default=default_selection, key="agg_multiselect")
         display_alliance_hover = st.sidebar.checkbox("Display Alliance Name on hover", value=True, key="agg_hover")
