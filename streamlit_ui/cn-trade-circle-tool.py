@@ -340,17 +340,30 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
             trade_input  = st.text_area("Trade Circles (one Ruler Name per line)", height=200)
             filter_input = st.text_area("Filter Out Players (one per line)", height=100)
 
-            # — Parse into blocks of names; blank lines split circles —
-            blocks = trade_input.split("\n\n")
+            # — Parse into blocks of names; blank lines split circles,
+            #   but if there are NO blank lines and >6 names, chunk into 6s —
+            lines = [ln.strip() for ln in trade_input.splitlines() if ln.strip()]
+            # detect “single‐block” long list
+            if trade_input.strip() and "\n\n" not in trade_input and len(lines) > 6:
+                # break into consecutive groups of 6
+                blocks = [ lines[i:i+6] for i in range(0, len(lines), 6) ]
+            else:
+                # use blank‐line separators
+                raw_blocks = trade_input.split("\n\n")
+                blocks = [
+                    [ln.strip() for ln in blk.splitlines() if ln.strip()]
+                    for blk in raw_blocks
+                ]
+            
             records = []
-            for i, blk in enumerate(blocks):
-                names = [ line.strip() for line in blk.splitlines() if line.strip() ]
+            for i, names in enumerate(blocks):
                 for name in names:
                     records.append({
-                        "Trade Circle": i+1,
+                        "Trade Circle": i + 1,
                         "Ruler Name":   name,
                         "merge_key":    name.lower()
                     })
+            
             tc_df = pd.DataFrame(records, columns=["Trade Circle","Ruler Name","merge_key"])
 
             # — if user left it blank, use the 'details' table to auto-build circles of 6 —
