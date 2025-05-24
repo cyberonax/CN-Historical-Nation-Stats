@@ -14,109 +14,11 @@ st.set_page_config(layout="wide")
 # HELPER FUNCTIONS
 ##############################
 
-def parse_date_from_filename(filename):
-    """
-    Extract and parse the date from a filename that follows the pattern:
-    "CyberNations_SE_Nation_Stats_<dateToken><zipid>.zip"
-    
-    For example, from "CyberNations_SE_Nation_Stats_4132025510001.zip":
-      - date_token = "4132025" is interpreted as month=4, day=13, year=2025.
-      - The zipid "510001" corresponds to the first 12 hours of the day (00:00).
-      - The zipid "510002" corresponds to the last 12 hours of the day (12:00).
-      
-    Returns a datetime object on success, otherwise None.
-    """
-    pattern = r'^CyberNations_SE_Nation_Stats_([0-9]+)(510001|510002)\.zip$'
-    match = re.match(pattern, filename)
-    if not match:
-        return None
-    date_token = match.group(1)
-    zip_id = match.group(2)
-    # Decide the hour offset based on the zip id.
-    # 510001 -> first 12 hours: hour=0; 510002 -> last 12 hours: hour=12.
-    hour = 0 if zip_id == "510001" else 12
-
-    # Try different possibilities for the digit splits in the date_token.
-    for m_digits in [1, 2]:
-        for d_digits in [1, 2]:
-            if m_digits + d_digits + 4 == len(date_token):
-                try:
-                    month = int(date_token[:m_digits])
-                    day = int(date_token[m_digits:m_digits+d_digits])
-                    year = int(date_token[m_digits+d_digits:m_digits+d_digits+4])
-                    if 1 <= month <= 12 and 1 <= day <= 31:
-                        return datetime(year, month, day, hour=hour)
-                except Exception:
-                    continue
-    return None
-
-def load_data():
-    """
-    Read all ZIPs under downloaded_zips/, parse snapshot_date,
-    and return a single concatenated DataFrame.
-    """
-    data_frames = []
-    for zip_path in Path("downloaded_zips").glob("CyberNations_SE_Nation_Stats_*.zip"):
-        snapshot_date = parse_date_from_filename(zip_path.name)
-        if snapshot_date is None:
-            continue
-        with zipfile.ZipFile(zip_path, 'r') as z:
-            member = z.namelist()[0]
-            with z.open(member) as f:
-                df = pd.read_csv(f, delimiter="|", encoding="ISO-8859-1", low_memory=False)
-                df['snapshot_date'] = pd.to_datetime(snapshot_date)
-                data_frames.append(df)
-    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
-
-@st.cache_data(ttl=60*60*24, show_spinner="Loading precomputed data…")
+@st.cache_data(ttl=60*60*24)
 def load_precomputed():
-    raw_path = Path("precomputed/raw.parquet")
-    agg_path = Path("precomputed/alliance_agg.parquet")
-
-    # ► Fast path: if both Parquets exist, just read them
-    if raw_path.exists() and agg_path.exists():
-        df_raw = pd.read_parquet(raw_path)
-        agg_df = pd.read_parquet(agg_path)
-        return df_raw, agg_df
-
-    # ► Fallback: generate from ZIPs
-    df_raw = load_data()
-    agg_df = aggregate_by_alliance(df_raw).rename(columns={"snapshot_date": "date"})
-
-    # Write out the Parquets so next run is fast
-    raw_path.parent.mkdir(exist_ok=True)
-    df_raw.to_parquet(raw_path, index=False)
-    agg_df.to_parquet(agg_path, index=False)
-
+    df_raw = pd.read_parquet("precomputed/raw.parquet")
+    agg_df = pd.read_parquet("precomputed/alliance_agg.parquet")
     return df_raw, agg_df
-
-def aggregate_by_alliance(df):
-    """
-    Aggregates nation stats by snapshot_date and Alliance.
-    For each group (by snapshot_date and Alliance):
-      - Counts the number of nations (renamed as 'nation_count').
-      - Sums the key metrics.
-    """
-    numeric_cols = ['Technology', 'Infrastructure', 'Base Land', 'Strength', 'Attacking Casualties', 'Defensive Casualties']
-
-    # Convert relevant columns to numeric after removing commas.
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.strip(), errors='coerce')
-    
-    agg_dict = {
-        'Nation ID': 'count',  # This will be renamed to nation_count.
-        'Technology': 'sum',
-        'Infrastructure': 'sum',
-        'Base Land': 'sum',
-        'Strength': 'sum',
-        'Attacking Casualties': 'sum',
-        'Defensive Casualties': 'sum'
-    }
-    
-    grouped = df.groupby(['snapshot_date', 'Alliance']).agg(agg_dict).reset_index()
-    grouped.rename(columns={'Nation ID': 'nation_count'}, inplace=True)
-    return grouped
 
 def altair_line_chart_from_pivot(pivot_df, y_field, alliances, show_alliance_hover=True):
     """
