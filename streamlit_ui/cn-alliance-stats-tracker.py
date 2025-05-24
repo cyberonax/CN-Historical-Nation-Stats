@@ -50,15 +50,27 @@ def parse_date_from_filename(filename):
                     continue
     return None
 
-@st.cache_data(ttl=60 * 60 * 24, show_spinner="Loading precomputed data…")
+@st.cache_data(ttl=60*60*24, show_spinner="Loading precomputed data…")
 def load_precomputed():
-    """
-    Reads the two Parquet files produced by batch_preprocess.py:
-      - precomputed/raw.parquet         → the full raw snapshot data
-      - precomputed/alliance_agg.parquet → alliance-level aggregates
-    """
-    df_raw = pd.read_parquet("precomputed/raw.parquet")
-    agg_df = pd.read_parquet("precomputed/alliance_agg.parquet")
+    raw_path = Path("precomputed/raw.parquet")
+    agg_path = Path("precomputed/alliance_agg.parquet")
+
+    if raw_path.exists() and agg_path.exists():
+        # fast path: they’re already here
+        df_raw = pd.read_parquet(raw_path)
+        agg_df = pd.read_parquet(agg_path)
+        return df_raw, agg_df
+
+    # fallback: run your old load_data + aggregation
+    from cn_helpers import load_data, aggregate_by_alliance  # or inline your functions
+    df_raw = load_data()  
+    agg_df = aggregate_by_alliance(df_raw).rename(columns={"snapshot_date":"date"})
+
+    # write them back out so next time we hit the fast path
+    raw_path.parent.mkdir(exist_ok=True)
+    df_raw.to_parquet(raw_path, index=False)
+    agg_df.to_parquet(agg_path, index=False)
+
     return df_raw, agg_df
 
 def aggregate_by_alliance(df):
