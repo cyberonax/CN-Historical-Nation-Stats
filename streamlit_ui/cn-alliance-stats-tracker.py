@@ -50,44 +50,16 @@ def parse_date_from_filename(filename):
                     continue
     return None
 
-@st.cache_data(                # ← added ttl so cache expires daily
-    show_spinner="Loading historical data...",
-    ttl=60 * 60 * 24           # cache for 24 hours (in seconds)
-)
-def load_data():
+@st.cache_data(ttl=60 * 60 * 24, show_spinner="Loading precomputed data…")
+def load_precomputed():
     """
-    Loads data from all zip files in the "downloaded_zips" folder.
-    Each zip file is expected to contain a CSV file with a '|' delimiter and
-    encoding 'ISO-8859-1'. A new column 'snapshot_date' is added based on the filename.
+    Reads the two Parquet files produced by batch_preprocess.py:
+      - precomputed/raw.parquet         → the full raw snapshot data
+      - precomputed/alliance_agg.parquet → alliance-level aggregates
     """
-    data_frames = []
-    zip_folder = Path("downloaded_zips")
-    if not zip_folder.exists():
-        st.warning("Folder 'downloaded_zips' not found. Please ensure zip files are available.")
-        return pd.DataFrame()
-    
-    for zip_file in zip_folder.glob("CyberNations_SE_Nation_Stats_*.zip"):
-        snapshot_date = parse_date_from_filename(zip_file.name)
-        if snapshot_date is None:
-            st.warning(f"Could not parse date from filename: {zip_file.name}")
-            continue
-        try:
-            with zipfile.ZipFile(zip_file, 'r') as z:
-                file_list = z.namelist()
-                if not file_list:
-                    st.warning(f"No files found in zip: {zip_file.name}")
-                    continue
-                with z.open(file_list[0]) as f:
-                    df = pd.read_csv(f, delimiter="|", encoding="ISO-8859-1", low_memory=False)
-                    df['snapshot_date'] = snapshot_date
-                    data_frames.append(df)
-        except Exception as e:
-            st.error(f"Error processing {zip_file.name}: {e}")
-    
-    if data_frames:
-        return pd.concat(data_frames, ignore_index=True)
-    else:
-        return pd.DataFrame()
+    df_raw = pd.read_parquet("precomputed/raw.parquet")
+    agg_df = pd.read_parquet("precomputed/alliance_agg.parquet")
+    return df_raw, agg_df
 
 def aggregate_by_alliance(df):
     """
@@ -314,10 +286,10 @@ def main():
         Use the tabs below to switch between aggregated alliance charts, individual nation metrics, and inactivity tracking.
     """)
     
-    # Load raw data
-    df_raw = load_data()
+    # 🔥 FAST LOAD here
+    df_raw, agg_df = load_precomputed()
     if df_raw.empty:
-        st.error("No data loaded. Please check the 'downloaded_zips' folder.")
+        st.error("No data loaded. Please check the downloaded zip files or run a batch preprocess.")
         return
     df_raw['snapshot_date'] = pd.to_datetime(df_raw['snapshot_date'])
     # Preserve the full timestamp including hour for accurate snapshot differentiation.
@@ -368,7 +340,7 @@ def main():
             selected_alliances = alliances
         
         # Filter data for selected alliances.
-        df_agg = df_raw[df_raw['Alliance'].isin(selected_alliances)].copy()
+        df_agg = agg_df.copy()
         
         # Date range filter.
         min_date = df_agg['date'].min()
