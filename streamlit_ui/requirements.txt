@@ -6,3 +6,4 @@ pulp
 scipy
 xlsxwriter
 openpyxl
+pyarrow
