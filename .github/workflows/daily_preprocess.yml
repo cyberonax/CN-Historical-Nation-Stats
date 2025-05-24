@@ -1,44 +1,55 @@
 # .github/workflows/daily_preprocess.yml
 name: 🗓️ Daily Batch Preprocess
 
-# Give the GITHUB_TOKEN write access to repo contents
 permissions:
   contents: write
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 1 * * *'
     - cron: '0 13 * * *'
-  workflow_dispatch:
 
 jobs:
   preprocess:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repo (with write creds)
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
-          # make sure the checkout step saves back credentials
           persist-credentials: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      # 1️⃣ Restore cache if available
+      - name: Restore parquet cache
+        uses: actions/cache@v3
         with:
-          python-version: '3.x'
+          path: precomputed
+          key: precomputed-cache-${{ runner.os }}-${{ hashFiles('downloaded_zips/**') }}
+          restore-keys: |
+            precomputed-cache-${{ runner.os }}
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
+      # 2️⃣ Set up Python & deps
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.x' }
+      - run: |
           pip install pandas pyarrow
 
+      # 3️⃣ Run your batch script (will skip re-gen if cache was restored)
       - name: Run batch_preprocess.py
         run: python batch_preprocess.py
 
-      - name: Commit updated Parquet files
+      # 4️⃣ Save updated cache
+      - name: Save parquet cache
+        uses: actions/cache@v3
+        with:
+          path: precomputed
+          key: precomputed-cache-${{ runner.os }}-${{ hashFiles('downloaded_zips/**') }}
+
+      # 5️⃣ (optional) commit any diffs back to the repo
+      - name: Commit updated Parquets
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add precomputed/*.parquet
-          git diff --quiet && echo "No changes to commit" || git commit -m "📈 Update precomputed data [ci skip]"
+          git add precomputed
+          git diff --quiet || git commit -m "chore: update precomputed data [ci skip]"
           git push
