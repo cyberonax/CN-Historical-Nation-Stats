@@ -1,10 +1,11 @@
 name: 🗓️ Daily Batch Preprocess
 
-# Run on a schedule (here: every day at midnight UTC)
+# Run on a schedule (here: every day at 01:00 AND 13:00 UTC)
 # and allow manual trigger via the Actions tab.
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 1 * * *'
+    - cron: '0 13 * * *'
   workflow_dispatch:
 
 jobs:
