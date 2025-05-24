@@ -368,8 +368,8 @@ def main():
         if not selected_alliances:
             selected_alliances = alliances
         
-        # Filter data for selected alliances.
-        df_agg = agg_df.copy()
+        # Start from the precomputed table, then filter
+        df_agg = agg_df[agg_df['Alliance'].isin(selected_alliances)].copy()
         
         # Date range filter.
         min_date = df_agg['date'].min()
@@ -379,24 +379,21 @@ def main():
             start_date, end_date = date_range
             df_agg = df_agg[(df_agg['date'] >= start_date) & (df_agg['date'] <= end_date)]
         
+        # Show raw
         with st.expander("Show Raw Aggregated Data"):
             st.dataframe(df_agg)
-        
-        # Aggregate data by alliance.
-        agg_df = aggregate_by_alliance(df_agg)
-        # Use the full snapshot_date (with hour) so each half-day snapshot remains unique.
-        agg_df['date'] = agg_df['snapshot_date']
-        
-        # Compute averages by dividing totals by the number of nations.
-        agg_df['avg_attacking_casualties'] = agg_df['Attacking Casualties'] / agg_df['nation_count']
-        agg_df['avg_defensive_casualties'] = agg_df['Defensive Casualties'] / agg_df['nation_count']
-        agg_df['avg_infrastructure'] = agg_df['Infrastructure'] / agg_df['nation_count']
-        agg_df['avg_technology'] = agg_df['Technology'] / agg_df['nation_count']
-        agg_df['avg_base_land'] = agg_df['Base Land'] / agg_df['nation_count']
-        agg_df['avg_strength'] = agg_df['Strength'] / agg_df['nation_count']
-        
+    
+        # Compute averages on the filtered df_agg
+        df_agg['avg_attacking_casualties'] = df_agg['Attacking Casualties'] / df_agg['nation_count']
+        df_agg['avg_defensive_casualties'] = df_agg['Defensive Casualties'] / df_agg['nation_count']
+        df_agg['avg_infrastructure']       = df_agg['Infrastructure']         / df_agg['nation_count']
+        df_agg['avg_technology']           = df_agg['Technology']             / df_agg['nation_count']
+        df_agg['avg_base_land']            = df_agg['Base Land']              / df_agg['nation_count']
+        df_agg['avg_strength']             = df_agg['Strength']               / df_agg['nation_count']
+    
+        # Show the final table
         with st.expander("Show Aggregated Alliance Data Table"):
-            st.dataframe(agg_df.sort_values('date'))
+            st.dataframe(df_agg.sort_values('date'))
         
         ##############
         # CHARTS USING ALTAIR FOR AGGREGATED DATA
