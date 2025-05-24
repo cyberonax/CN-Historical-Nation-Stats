@@ -50,23 +50,40 @@ def parse_date_from_filename(filename):
                     continue
     return None
 
+def load_data():
+    """
+    Read all ZIPs under downloaded_zips/, parse snapshot_date,
+    and return a single concatenated DataFrame.
+    """
+    data_frames = []
+    for zip_path in Path("downloaded_zips").glob("CyberNations_SE_Nation_Stats_*.zip"):
+        snapshot_date = parse_date_from_filename(zip_path.name)
+        if snapshot_date is None:
+            continue
+        with zipfile.ZipFile(zip_path, 'r') as z:
+            member = z.namelist()[0]
+            with z.open(member) as f:
+                df = pd.read_csv(f, delimiter="|", encoding="ISO-8859-1", low_memory=False)
+                df['snapshot_date'] = pd.to_datetime(snapshot_date)
+                data_frames.append(df)
+    return pd.concat(data_frames, ignore_index=True) if data_frames else pd.DataFrame()
+
 @st.cache_data(ttl=60*60*24, show_spinner="Loading precomputed data…")
 def load_precomputed():
     raw_path = Path("precomputed/raw.parquet")
     agg_path = Path("precomputed/alliance_agg.parquet")
 
+    # ► Fast path: if both Parquets exist, just read them
     if raw_path.exists() and agg_path.exists():
         df_raw = pd.read_parquet(raw_path)
         agg_df = pd.read_parquet(agg_path)
         return df_raw, agg_df
 
-    # FALLBACK: load from ZIPs using your inline load_data & aggregate_by_alliance
-    # (you already have these defined above in this script)
-    df_raw = load_data()                         # <-- your original ZIP reader
-    agg_df = aggregate_by_alliance(df_raw)       # <-- your existing aggregator
-    agg_df = agg_df.rename(columns={"snapshot_date":"date"})
+    # ► Fallback: generate from ZIPs
+    df_raw = load_data()
+    agg_df = aggregate_by_alliance(df_raw).rename(columns={"snapshot_date": "date"})
 
-    # write them out so next run is fast
+    # Write out the Parquets so next run is fast
     raw_path.parent.mkdir(exist_ok=True)
     df_raw.to_parquet(raw_path, index=False)
     agg_df.to_parquet(agg_path, index=False)
