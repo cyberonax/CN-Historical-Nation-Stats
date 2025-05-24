@@ -56,17 +56,17 @@ def load_precomputed():
     agg_path = Path("precomputed/alliance_agg.parquet")
 
     if raw_path.exists() and agg_path.exists():
-        # fast path: they’re already here
         df_raw = pd.read_parquet(raw_path)
         agg_df = pd.read_parquet(agg_path)
         return df_raw, agg_df
 
-    # fallback: run your old load_data + aggregation
-    from cn_helpers import load_data, aggregate_by_alliance  # or inline your functions
-    df_raw = load_data()  
-    agg_df = aggregate_by_alliance(df_raw).rename(columns={"snapshot_date":"date"})
+    # FALLBACK: load from ZIPs using your inline load_data & aggregate_by_alliance
+    # (you already have these defined above in this script)
+    df_raw = load_data()                         # <-- your original ZIP reader
+    agg_df = aggregate_by_alliance(df_raw)       # <-- your existing aggregator
+    agg_df = agg_df.rename(columns={"snapshot_date":"date"})
 
-    # write them back out so next time we hit the fast path
+    # write them out so next run is fast
     raw_path.parent.mkdir(exist_ok=True)
     df_raw.to_parquet(raw_path, index=False)
     agg_df.to_parquet(agg_path, index=False)
