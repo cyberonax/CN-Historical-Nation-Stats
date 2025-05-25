@@ -28,13 +28,14 @@ def parse_date_from_filename(filename):
             if m_digits + d_digits + 4 == len(date_token):
                 try:
                     month = int(date_token[:m_digits])
-                    day = int(date_token[m_digits:m_digits + d_digits])
-                    year = int(date_token[m_digits + d_digits:m_digits + d_digits + 4])
+                    day   = int(date_token[m_digits:m_digits + d_digits])
+                    year  = int(date_token[m_digits + d_digits:m_digits + d_digits + 4])
                     if 1 <= month <= 12 and 1 <= day <= 31:
                         return datetime(year, month, day, hour=hour)
                 except Exception:
                     continue
     return None
+
 
 def aggregate_by_alliance(df):
     """
@@ -62,14 +63,14 @@ def aggregate_by_alliance(df):
         'Defensive Casualties': 'sum',
     }
 
-    grouped = (
+    return (
         df
         .groupby(['snapshot_date', 'Alliance'])
         .agg(agg_dict)
         .reset_index()
         .rename(columns={'Nation ID': 'nation_count'})
     )
-    return grouped
+
 
 ##############################
 # MAIN PREPROCESSING LOGIC
@@ -106,25 +107,29 @@ def load_all_zips():
 
     return pd.concat(data_frames, ignore_index=True)
 
+
 def main():
     # 1) Load raw snapshots
     print("▶️  Loading all ZIPs…")
     raw = load_all_zips()
 
+    # Prepare output directory inside your Streamlit UI folder
+    out_dir = Path(__file__).parent / "streamlit_ui" / "precomputed"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     # 2) Save out raw parquet
-    raw_out = Path("precomputed/raw.parquet")
-    raw_out.parent.mkdir(exist_ok=True)
+    raw_out = out_dir / "raw.parquet"
     raw.to_parquet(raw_out, index=False)
     print(f"✅  Wrote raw data to {raw_out}")
 
     # 3) Compute and save alliance aggregates
     print("▶️  Computing alliance aggregates…")
     agg = aggregate_by_alliance(raw)
-    # rename for convenience
     agg = agg.rename(columns={"snapshot_date": "date"})
-    agg_out = Path("precomputed/alliance_agg.parquet")
+    agg_out = out_dir / "alliance_agg.parquet"
     agg.to_parquet(agg_out, index=False)
     print(f"✅  Wrote aggregated data to {agg_out}")
+
 
 if __name__ == "__main__":
     main()
