@@ -1,55 +1,47 @@
-# .github/workflows/daily_preprocess.yml
-name: 🗓️ Daily Batch Preprocess
-
-permissions:
-  contents: write
+name: Daily Precompute
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 1 * * *'
-    - cron: '0 13 * * *'
+    - cron: '5 0 * * *'      # every day at 00:05 UTC
+  workflow_dispatch:         # manual trigger
 
 jobs:
-  preprocess:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
         with:
           persist-credentials: true
 
-      # 1️⃣ Restore cache if available
-      - name: Restore parquet cache
-        uses: actions/cache@v3
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
         with:
-          path: precomputed
-          key: precomputed-cache-${{ runner.os }}-${{ hashFiles('downloaded_zips/**') }}
-          restore-keys: |
-            precomputed-cache-${{ runner.os }}
+          python-version: 3.12
 
-      # 2️⃣ Set up Python & deps
-      - uses: actions/setup-python@v4
-        with: { python-version: '3.x' }
-      - run: |
-          pip install pandas pyarrow
-
-      # 3️⃣ Run your batch script (will skip re-gen if cache was restored)
-      - name: Run batch_preprocess.py
-        run: python batch_preprocess.py
-
-      # 4️⃣ Save updated cache
-      - name: Save parquet cache
-        uses: actions/cache@v3
-        with:
-          path: precomputed
-          key: precomputed-cache-${{ runner.os }}-${{ hashFiles('downloaded_zips/**') }}
-
-      # 5️⃣ (optional) commit any diffs back to the repo
-      - name: Commit updated Parquets
+      - name: Install dependencies
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add precomputed
-          git diff --quiet || git commit -m "chore: update precomputed data [ci skip]"
-          git push
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run batch_preprocess
+        run: |
+          python batch_preprocess.py
+
+      - name: Commit & push updated Parquet caches
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Stage your two Parquet files
+          git add streamlit_ui/precomputed/raw.parquet \
+                  streamlit_ui/precomputed/alliance_agg.parquet
+
+          # Only commit if something changed
+          if ! git diff --quiet --cached; then
+            git commit -m "ci: daily update of precomputed parquet caches [skip ci]"
+            git push
+          else
+            echo "No changes in Parquet caches; skipping commit."
+          fi
