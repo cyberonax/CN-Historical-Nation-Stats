@@ -1,19 +1,25 @@
-name: Daily Precompute
+# .github/workflows/daily_precompute.yml
+name: 🗓️ Daily Precompute
+
+# Grant write access so the action can push updated files
+permissions:
+  contents: write
 
 on:
   schedule:
-    - cron: '5 0 * * *'      # every day at 00:05 UTC
-  workflow_dispatch:         # manual trigger
+    # every day at 00:05 UTC
+    - cron:  '5 0 * * *'
+  workflow_dispatch:
 
 jobs:
-  build:
+  preprocess:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          persist-credentials: true
+          persist-credentials: true  # so pushes use the built-in token
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v4
@@ -23,25 +29,28 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install pandas pyarrow xlsxwriter streamlit altair
+          # no requirements.txt? install just what you need:
+          pip install pandas pyarrow
 
-      - name: Run batch_preprocess
-        run: |
-          python batch_preprocess.py
+      - name: Run batch_preprocess.py
+        run: python batch_preprocess.py
 
       - name: Commit & push updated Parquet caches
+        # use the built-in GITHUB_TOKEN for authentication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Stage your two Parquet files
+          # Stage only the two Parquet files
           git add streamlit_ui/precomputed/raw.parquet \
                   streamlit_ui/precomputed/alliance_agg.parquet
 
-          # Only commit if something changed
+          # Commit & push only if they've changed
           if ! git diff --quiet --cached; then
             git commit -m "ci: daily update of precomputed parquet caches [skip ci]"
-            git push
+            git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} HEAD:${{ github.ref_name }}
           else
-            echo "No changes in Parquet caches; skipping commit."
+            echo "✅  No changes in Parquet caches; skipping commit."
           fi
