@@ -113,19 +113,18 @@ def main():
     print("▶️  Loading all ZIPs…")
     raw = load_all_zips()
 
-    # Prepare output directory inside your Streamlit UI folder
+    # 2) Prepare output dir under streamlit_ui/precomputed
     out_dir = Path(__file__).parent / "streamlit_ui" / "precomputed"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 2) Save out raw parquet
+    # 3) Save raw parquet
     raw_out = out_dir / "raw.parquet"
     raw.to_parquet(raw_out, index=False)
     print(f"✅  Wrote raw data to {raw_out}")
 
-    # 3) Compute and save alliance aggregates
+    # 4) Compute & save alliance aggregates
     print("▶️  Computing alliance aggregates…")
-    agg = aggregate_by_alliance(raw)
-    agg = agg.rename(columns={"snapshot_date": "date"})
+    agg = aggregate_by_alliance(raw).rename(columns={"snapshot_date": "date"})
     agg_out = out_dir / "alliance_agg.parquet"
     agg.to_parquet(agg_out, index=False)
     print(f"✅  Wrote aggregated data to {agg_out}")
