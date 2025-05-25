@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install pandas pyarrow xlsxwriter streamlit altair
 
       - name: Run batch_preprocess
         run: |
