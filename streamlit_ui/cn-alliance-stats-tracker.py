@@ -327,18 +327,56 @@ def main():
             st.dataframe(nation_count_growth)
         
         # 2. Average Alliance Inactivity Over Time (Days)
-        activity = (
-            df_raw.dropna(subset=['activity_score'])
-                  .groupby(['date','Alliance'])['activity_score']
-                  .mean()
-                  .unstack('Alliance')
-        )
         with st.expander("Average Alliance Inactivity Over Time (Days)"):
-            st.altair_chart(altair_line_chart_from_pivot(activity, "activity_score", selected_alliances, display_alliance_hover), use_container_width=True)
+            activity = (
+                df_raw
+                .dropna(subset=['activity_score'])
+                .groupby(['date','Alliance'])['activity_score']
+                .mean()
+                .unstack('Alliance')
+            )[selected_alliances]
+        
+            df_long = activity.reset_index().melt(
+                id_vars="date", var_name="Alliance", value_name="activity_score"
+            )
+        
+            chart = (
+                alt.Chart(df_long)
+                .mark_line()
+                .encode(
+                    x=alt.X("date:T", title="Date"),
+                    y=alt.Y("activity_score:Q", title="Average Alliance Inactivity Over Time (Days)"),
+                    color=alt.Color("Alliance:N", legend=alt.Legend(title="Alliance"))
+                )
+                .properties(height=400, width=700)
+                .interactive()
+            )
+            st.altair_chart(chart, use_container_width=True)
             st.caption("Lower scores indicate more recent activity.")
-            current = activity.ffill().iloc[-1].rename("Current Avg Inactivity (Days)").reset_index()
-            all_time = activity.mean().rename("All Time Avg Inactivity (Days)").reset_index()
-            st.dataframe(current); st.dataframe(all_time)
+        
+            # Build and sort summary tables
+            current = (
+                activity
+                .ffill()                     # propagate last valid
+                .iloc[-1]                    # most recent row
+                .rename("Current Avg Inactivity (Days)")
+                .reset_index()
+                .sort_values("Current Avg Inactivity (Days)")  # sort ascending
+            )
+        
+            all_time = (
+                activity
+                .mean()
+                .rename("All Time Avg Inactivity (Days)")
+                .reset_index()
+                .sort_values("All Time Avg Inactivity (Days)")  # sort ascending
+            )
+        
+            st.markdown("#### Current Average Alliance Inactivity (Days)")
+            st.dataframe(current)
+        
+            st.markdown("#### All Time Average Alliance Inactivity (Days)")
+            st.dataframe(all_time)
         
         # 3. Total Empty Trade Slots by Alliance Over Time
         with st.expander("Total Empty Trade Slots by Alliance Over Time"):
