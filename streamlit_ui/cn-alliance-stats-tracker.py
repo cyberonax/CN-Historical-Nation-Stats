@@ -10,26 +10,112 @@ import io
 
 st.set_page_config(layout="wide")
 
-# point at streamlit_ui/
-BASE_DIR = Path(__file__).parent  
-PRECOMP = BASE_DIR / "precomputed"
-
 ##############################
 # HELPER FUNCTIONS
 ##############################
 
-@st.cache_data(ttl=60*60*24)
-def load_precomputed():
-    raw_file = PRECOMP / "raw.parquet"
-    agg_file = PRECOMP / "alliance_agg.parquet"
+def parse_date_from_filename(filename):
+    """
+    Extract and parse the date from a filename that follows the pattern:
+    "CyberNations_SE_Nation_Stats_<dateToken><zipid>.zip"
+    
+    For example, from "CyberNations_SE_Nation_Stats_4132025510001.zip":
+      - date_token = "4132025" is interpreted as month=4, day=13, year=2025.
+      - The zipid "510001" corresponds to the first 12 hours of the day (00:00).
+      - The zipid "510002" corresponds to the last 12 hours of the day (12:00).
+      
+    Returns a datetime object on success, otherwise None.
+    """
+    pattern = r'^CyberNations_SE_Nation_Stats_([0-9]+)(510001|510002)\.zip$'
+    match = re.match(pattern, filename)
+    if not match:
+        return None
+    date_token = match.group(1)
+    zip_id = match.group(2)
+    # Decide the hour offset based on the zip id.
+    # 510001 -> first 12 hours: hour=0; 510002 -> last 12 hours: hour=12.
+    hour = 0 if zip_id == "510001" else 12
 
-    if not raw_file.exists() or not agg_file.exists():
-        st.error(f"Could not find precomputed files in {PRECOMP}")
-        return pd.DataFrame(), pd.DataFrame()
+    # Try different possibilities for the digit splits in the date_token.
+    for m_digits in [1, 2]:
+        for d_digits in [1, 2]:
+            if m_digits + d_digits + 4 == len(date_token):
+                try:
+                    month = int(date_token[:m_digits])
+                    day = int(date_token[m_digits:m_digits+d_digits])
+                    year = int(date_token[m_digits+d_digits:m_digits+d_digits+4])
+                    if 1 <= month <= 12 and 1 <= day <= 31:
+                        return datetime(year, month, day, hour=hour)
+                except Exception:
+                    continue
+    return None
 
-    df_raw = pd.read_parquet(raw_file)
-    agg_df = pd.read_parquet(agg_file)
-    return df_raw, agg_df
+@st.cache_data(                # ← added ttl so cache expires daily
+    show_spinner="Loading historical data...",
+    ttl=60 * 60 * 24           # cache for 24 hours (in seconds)
+)
+def load_data():
+    """
+    Loads data from all zip files in the "downloaded_zips" folder.
+    Each zip file is expected to contain a CSV file with a '|' delimiter and
+    encoding 'ISO-8859-1'. A new column 'snapshot_date' is added based on the filename.
+    """
+    data_frames = []
+    zip_folder = Path("downloaded_zips")
+    if not zip_folder.exists():
+        st.warning("Folder 'downloaded_zips' not found. Please ensure zip files are available.")
+        return pd.DataFrame()
+    
+    for zip_file in zip_folder.glob("CyberNations_SE_Nation_Stats_*.zip"):
+        snapshot_date = parse_date_from_filename(zip_file.name)
+        if snapshot_date is None:
+            st.warning(f"Could not parse date from filename: {zip_file.name}")
+            continue
+        try:
+            with zipfile.ZipFile(zip_file, 'r') as z:
+                file_list = z.namelist()
+                if not file_list:
+                    st.warning(f"No files found in zip: {zip_file.name}")
+                    continue
+                with z.open(file_list[0]) as f:
+                    df = pd.read_csv(f, delimiter="|", encoding="ISO-8859-1", low_memory=False)
+                    df['snapshot_date'] = snapshot_date
+                    data_frames.append(df)
+        except Exception as e:
+            st.error(f"Error processing {zip_file.name}: {e}")
+    
+    if data_frames:
+        return pd.concat(data_frames, ignore_index=True)
+    else:
+        return pd.DataFrame()
+
+def aggregate_by_alliance(df):
+    """
+    Aggregates nation stats by snapshot_date and Alliance.
+    For each group (by snapshot_date and Alliance):
+      - Counts the number of nations (renamed as 'nation_count').
+      - Sums the key metrics.
+    """
+    numeric_cols = ['Technology', 'Infrastructure', 'Base Land', 'Strength', 'Attacking Casualties', 'Defensive Casualties']
+
+    # Convert relevant columns to numeric after removing commas.
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '').str.strip(), errors='coerce')
+    
+    agg_dict = {
+        'Nation ID': 'count',  # This will be renamed to nation_count.
+        'Technology': 'sum',
+        'Infrastructure': 'sum',
+        'Base Land': 'sum',
+        'Strength': 'sum',
+        'Attacking Casualties': 'sum',
+        'Defensive Casualties': 'sum'
+    }
+    
+    grouped = df.groupby(['snapshot_date', 'Alliance']).agg(agg_dict).reset_index()
+    grouped.rename(columns={'Nation ID': 'nation_count'}, inplace=True)
+    return grouped
 
 def altair_line_chart_from_pivot(pivot_df, y_field, alliances, show_alliance_hover=True):
     """
@@ -228,14 +314,14 @@ def main():
         Use the tabs below to switch between aggregated alliance charts, individual nation metrics, and inactivity tracking.
     """)
     
-    # 🔥 FAST LOAD here
-    df_raw, agg_df = load_precomputed()
+    # Load raw data
+    df_raw = load_data()
     if df_raw.empty:
-        st.error("No data loaded. Please check the downloaded zip files or run a batch preprocess.")
+        st.error("No data loaded. Please check the 'downloaded_zips' folder.")
         return
-    # parse the original snapshot_date into your working 'date' column
-    df_raw['date'] = pd.to_datetime(df_raw['snapshot_date'])
-    df_raw.drop(columns=['snapshot_date'], inplace=True)
+    df_raw['snapshot_date'] = pd.to_datetime(df_raw['snapshot_date'])
+    # Preserve the full timestamp including hour for accurate snapshot differentiation.
+    df_raw['date'] = df_raw['snapshot_date']
     
     # Ensure key numeric metrics are converted properly.
     numeric_cols = ['Technology', 'Infrastructure', 'Base Land', 'Strength', 'Attacking Casualties', 'Defensive Casualties']
@@ -269,108 +355,774 @@ def main():
     #########################################
     with tabs[0]:
         st.header("Aggregated Alliance Metrics Over Time")
-    
-        # Sidebar controls
+        
+        # Sidebar filters for aggregated charts.
         st.sidebar.header("Alliance Metrics")
-        df_raw["Alliance"] = df_raw["Alliance"].fillna("None")
-        alliances = sorted(df_raw["Alliance"].dropna().unique())
-    
-        # Pre-select a few popular alliances if they exist
-        defaults = ["Freehold of The Wolves", "CLAWS", "NATO", "Doom Squad"]
-        default_selection = [a for a in defaults if a in alliances]
-        selected_alliances = st.sidebar.multiselect(
-            "Filter by Alliance",
-            options=alliances,
-            default=default_selection,
-            key="agg_multiselect"
-        )
-    
-        display_hover = st.sidebar.checkbox(
-            "Display Alliance Name on hover",
-            value=True,
-            key="agg_hover"
-        )
-    
-        # Date range picker
-        min_date, max_date = agg_df["date"].min().date(), agg_df["date"].max().date()
-        dr = st.sidebar.date_input(
-            "Select date range",
-            [min_date, max_date],
-            key="agg_date"
-        )
-        if isinstance(dr, list) and len(dr) == 2:
-            start, end = pd.Timestamp(dr[0]), pd.Timestamp(dr[1])
-            df_agg = agg_df[
-                (agg_df["date"] >= start) &
-                (agg_df["date"] <= end) &
-                (agg_df["Alliance"].isin(selected_alliances))
-            ].copy()
-        else:
-            df_agg = agg_df[agg_df["Alliance"].isin(selected_alliances)].copy()
-    
-        # —————————————————————————————————————————————
+        alliances = sorted(df_raw['Alliance'].dropna().unique())
+        # Compute the intersection of default selections with the available alliances.
+        default_defaults = ["Freehold of The Wolves", "CLAWS", "NATO", "Doom Squad"]
+        default_selection = [a for a in default_defaults if a in alliances]
+        selected_alliances = st.sidebar.multiselect("Filter by Alliance", options=alliances, default=default_selection, key="agg_multiselect")
+        display_alliance_hover = st.sidebar.checkbox("Display Alliance Name on hover", value=True, key="agg_hover")
+        if not selected_alliances:
+            selected_alliances = alliances
+        
+        # Filter data for selected alliances.
+        df_agg = df_raw[df_raw['Alliance'].isin(selected_alliances)].copy()
+        
+        # Date range filter.
+        min_date = df_agg['date'].min()
+        max_date = df_agg['date'].max()
+        date_range = st.sidebar.date_input("Select date range", [min_date, max_date], key="agg_date")
+        if isinstance(date_range, list) and len(date_range) == 2:
+            start_date, end_date = date_range
+            df_agg = df_agg[(df_agg['date'] >= start_date) & (df_agg['date'] <= end_date)]
+        
+        with st.expander("Show Raw Aggregated Data"):
+            st.dataframe(df_agg)
+        
+        # Aggregate data by alliance.
+        agg_df = aggregate_by_alliance(df_agg)
+        # Use the full snapshot_date (with hour) so each half-day snapshot remains unique.
+        agg_df['date'] = agg_df['snapshot_date']
+        
+        # Compute averages by dividing totals by the number of nations.
+        agg_df['avg_attacking_casualties'] = agg_df['Attacking Casualties'] / agg_df['nation_count']
+        agg_df['avg_defensive_casualties'] = agg_df['Defensive Casualties'] / agg_df['nation_count']
+        agg_df['avg_infrastructure'] = agg_df['Infrastructure'] / agg_df['nation_count']
+        agg_df['avg_technology'] = agg_df['Technology'] / agg_df['nation_count']
+        agg_df['avg_base_land'] = agg_df['Base Land'] / agg_df['nation_count']
+        agg_df['avg_strength'] = agg_df['Strength'] / agg_df['nation_count']
+        
+        with st.expander("Show Aggregated Alliance Data Table"):
+            st.dataframe(agg_df.sort_values('date'))
+        
+        ##############
+        # CHARTS USING ALTAIR FOR AGGREGATED DATA
+        ##############
+        
+        # 1. Nation Count by Alliance Over Time
+        with st.expander("Nation Count by Alliance Over Time"):
+            pivot_count = agg_df.pivot(index='date', columns='Alliance', values='nation_count')
+            chart = altair_line_chart_from_pivot(pivot_count, "nation_count", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+            # Display current and growth tables for Nation Count.
+            current_nation_count = current_alliance_stats(agg_df, 'nation_count', 'Current Nation Count')
+            st.markdown("#### Current Nation Count by Alliance")
+            st.dataframe(current_nation_count)
+            nation_count_growth = compute_alliance_growth(agg_df, 'nation_count')
+            nation_count_growth.rename(columns={"nation_count Growth Per Day": "Nation Count Growth Per Day"}, inplace=True)
+            st.markdown("#### Nation Count Growth Per Day")
+            st.dataframe(nation_count_growth)
+        
         # 2. Average Alliance Inactivity Over Time (Days)
-        # —————————————————————————————————————————————
-        if "activity_score" in df_raw.columns:
-            # Build a long form table of average activity per alliance/date
-            activity_grouped = (
-                df_raw
-                .dropna(subset=["activity_score"])
-                .groupby(["date", "Alliance"])["activity_score"]
-                .mean()
-                .reset_index()
-            )
-    
-            # Pivot for the line chart
-            pivot_activity = activity_grouped.pivot(
-                index="date",
-                columns="Alliance",
-                values="activity_score"
-            )
-    
+        if 'activity_score' in df_agg.columns:
             with st.expander("Average Alliance Inactivity Over Time (Days)"):
-                # Draw the line chart
-                chart = altair_line_chart_from_pivot(
-                    pivot_activity,
-                    "activity_score",
-                    selected_alliances,
-                    display_hover
-                ).encode(
-                    x=alt.X("date:T", title="Date"),
-                    y=alt.Y("activity_score:Q", title="Average Alliance Inactivity Over Time (Days)")
-                )
+                activity_grouped = df_agg.dropna(subset=['activity_score']).groupby(['date', 'Alliance'])['activity_score'].mean().reset_index()
+                pivot_activity = activity_grouped.pivot(index='date', columns='Alliance', values='activity_score')
+                chart = altair_line_chart_from_pivot(pivot_activity, "activity_score", selected_alliances, display_alliance_hover)
                 st.altair_chart(chart, use_container_width=True)
                 st.caption("Lower scores indicate more recent activity.")
-    
-                # Current average inactivity (latest snapshot per alliance)
-                current = (
-                    activity_grouped
-                    .sort_values("date")
-                    .groupby("Alliance")
-                    .last()
-                    .reset_index()[["Alliance", "activity_score"]]
-                    .query("Alliance in @selected_alliances")
-                    .rename(columns={"activity_score": "Current Avg Inactivity (Days)"})
-                    .sort_values("Current Avg Inactivity (Days)", ascending=True)
-                    .reset_index(drop=True)
-                )
+                # Current Average Inactivity: for each alliance, use the latest snapshot and average the activity scores.
+                current_inactivity = df_agg.dropna(subset=['activity_score']).groupby('Alliance').apply(
+                    lambda x: x[x['date'] == x['date'].max()]['activity_score'].mean()
+                ).reset_index(name='Current Average Inactivity (Days)')
                 st.markdown("#### Current Average Alliance Inactivity (Days)")
-                st.dataframe(current)
-    
-                # All-time average inactivity
-                all_time = (
-                    activity_grouped
-                    .groupby("Alliance")["activity_score"]
-                    .mean()
-                    .reset_index()
-                    .query("Alliance in @selected_alliances")
-                    .rename(columns={"activity_score": "All Time Avg Inactivity (Days)"})
-                    .sort_values("All Time Avg Inactivity (Days)", ascending=True)
-                    .reset_index(drop=True)
-                )
+                st.dataframe(current_inactivity)
+                # All Time Average Inactivity
+                all_time_inactivity = df_agg.dropna(subset=['activity_score']).groupby('Alliance')['activity_score'].mean().reset_index().rename(columns={'activity_score': 'All Time Average Inactivity (Days)'})
                 st.markdown("#### All Time Average Alliance Inactivity (Days)")
-                st.dataframe(all_time)
+                st.dataframe(all_time_inactivity)
+        
+        # 3. Total Empty Trade Slots by Alliance Over Time
+        with st.expander("Total Empty Trade Slots by Alliance Over Time"):
+            # original line chart and summary tables
+            empty_agg = df_agg.groupby(['snapshot_date', 'Alliance'])['Empty Slots Count'].sum().reset_index()
+            empty_agg['date'] = empty_agg['snapshot_date']
+            pivot_empty_total = empty_agg.pivot(index='date', columns='Alliance', values='Empty Slots Count')
+            chart = altair_line_chart_from_pivot(pivot_empty_total, "Empty Slots Count", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
 
+            current_empty_total = empty_agg.sort_values('date') \
+                .groupby('Alliance').last().reset_index()[['Alliance', 'Empty Slots Count']] \
+                .rename(columns={'Empty Slots Count': 'Current Total Empty Trade Slots'})
+            st.markdown("#### Current Total Empty Trade Slots by Alliance")
+            st.dataframe(current_empty_total)
+
+            avg_empty_total = empty_agg.groupby('Alliance')['Empty Slots Count'] \
+                .mean().reset_index().rename(columns={'Empty Slots Count': 'All Time Average Empty Trade Slots'})
+            st.markdown("#### All Time Average Empty Trade Slots by Alliance")
+            st.dataframe(avg_empty_total)
+
+            # prepare percent‑change series
+            pct_src = empty_agg.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            # daily % change (last snapshot each day)
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance', 'day']).last() \
+                .reset_index()[['Alliance', 'day', 'Empty Slots Count']]
+            daily['pct_change'] = (daily['Empty Slots Count'] / 
+                                   daily.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
+
+            # monthly % change (last snapshot each month)
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance', 'month']).last() \
+                .reset_index()[['Alliance', 'month', 'Empty Slots Count']]
+            monthly['pct_change'] = (monthly['Empty Slots Count'] / 
+                                     monthly.groupby('Alliance')['Empty Slots Count'].shift(1) - 1) * 100
+
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="empty_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="empty_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Empty Trade Slots — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="empty_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Empty Trade Slots — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 4. % of Nations with Empty Trade Slots Over Time
+        with st.expander("% of Nations with Empty Trade Slots Over Time"):
+            total_nations = df_agg.groupby(['snapshot_date', 'Alliance']) \
+                .agg(total_nations=('Nation ID', 'count')).reset_index()
+            empty_nations = df_agg[df_agg['Empty Slots Count'] > 0] \
+                .groupby(['snapshot_date', 'Alliance']) \
+                .agg(empty_nations=('Nation ID', 'count')).reset_index()
+            ratio_df = pd.merge(total_nations, empty_nations,
+                                on=['snapshot_date', 'Alliance'], how='left')
+            ratio_df['empty_nations'] = ratio_df['empty_nations'].fillna(0)
+            ratio_df['percent_empty'] = (ratio_df['empty_nations'] / ratio_df['total_nations']) * 100
+            ratio_df['date'] = ratio_df['snapshot_date']
+            pivot_ratio = ratio_df.pivot(index='date', columns='Alliance', values='percent_empty')
+            chart = altair_line_chart_from_pivot(pivot_ratio, "percent_empty", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_empty_percent = ratio_df.sort_values('date') \
+                .groupby('Alliance').last().reset_index()[['Alliance', 'percent_empty']] \
+                .rename(columns={'percent_empty': 'Current % of Nations with Empty Trade Slots'})
+            st.markdown("#### Current % of Nations with Empty Trade Slots by Alliance")
+            st.dataframe(current_empty_percent)
+
+            avg_empty_percent = ratio_df.groupby('Alliance')['percent_empty'] \
+                .mean().reset_index() \
+                .rename(columns={'percent_empty': 'All Time Average % of Nations with Empty Trade Slots'})
+            st.markdown("#### All Time Average % of Nations with Empty Trade Slots by Alliance")
+            st.dataframe(avg_empty_percent)
+
+            # prepare percent‐change series
+            pct_src = ratio_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            # daily % change
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance','day']).last() \
+                .reset_index()[['Alliance','day','percent_empty']]
+            daily['pct_change'] = (daily['percent_empty'] / 
+                                   daily.groupby('Alliance')['percent_empty'].shift(1) - 1) * 100
+
+            # monthly % change
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance','month']).last() \
+                .reset_index()[['Alliance','month','percent_empty']]
+            monthly['pct_change'] = (monthly['percent_empty'] / 
+                                     monthly.groupby('Alliance')['percent_empty'].shift(1) - 1) * 100
+
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="empty_percent_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="empty_percent_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of % Nations with Empty Trade Slots — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="empty_percent_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of % Nations with Empty Trade Slots — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+        
+        # 5. Total Technology by Alliance Over Time
+        with st.expander("Total Technology by Alliance Over Time"):
+            # original line chart and tables
+            pivot_tech = agg_df.pivot(index='date', columns='Alliance', values='Technology')
+            chart = altair_line_chart_from_pivot(pivot_tech, "Technology", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_total_tech = current_alliance_stats(agg_df, 'Technology', 'Current Total Technology')
+            st.markdown("#### Current Total Technology by Alliance")
+            st.dataframe(current_total_tech)
+
+            tech_growth = compute_alliance_growth(agg_df, 'Technology')
+            st.markdown("#### Technology Growth Per Day")
+            st.dataframe(tech_growth)
+
+            # prepare percent‑change
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            # daily % change
+            daily = (pct_src.sort_values('date')
+                          .groupby(['Alliance','day']).last()
+                          .reset_index()[['Alliance','day','Technology']])
+            daily['pct_change'] = (daily['Technology'] / daily.groupby('Alliance')['Technology'].shift(1) - 1) * 100
+
+            # monthly % change
+            monthly = (pct_src.sort_values('date')
+                            .groupby(['Alliance','month']).last()
+                            .reset_index()[['Alliance','month','Technology']])
+            monthly['pct_change'] = (monthly['Technology'] / monthly.groupby('Alliance')['Technology'].shift(1) - 1) * 100
+
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="tech_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="tech_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Technology — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="tech_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Technology — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+        
+        # 6. Average Technology by Alliance Over Time
+        with st.expander("Average Technology by Alliance Over Time"):
+            pivot_avg_tech = agg_df.pivot(index='date', columns='Alliance', values='avg_technology')
+            chart = altair_line_chart_from_pivot(pivot_avg_tech, "avg_technology", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_avg_tech = current_alliance_stats(agg_df, 'avg_technology', 'Current Average Technology')
+            st.markdown("#### Current Average Technology by Alliance")
+            st.dataframe(current_avg_tech)
+
+            avg_tech_growth = compute_alliance_growth(agg_df, 'avg_technology')
+            st.markdown("#### Average Technology Growth Per Day")
+            st.dataframe(avg_tech_growth)
+
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance','day']).last() \
+                .reset_index()[['Alliance','day','avg_technology']]
+            daily['pct_change'] = (daily['avg_technology'] / 
+                                   daily.groupby('Alliance')['avg_technology'].shift(1) - 1) * 100
+
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance','month']).last() \
+                .reset_index()[['Alliance','month','avg_technology']]
+            monthly['pct_change'] = (monthly['avg_technology'] / 
+                                     monthly.groupby('Alliance')['avg_technology'].shift(1) - 1) * 100
+
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="avg_tech_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="avg_tech_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Average Technology — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="avg_tech_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Average Technology — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 7. Total Infrastructure by Alliance Over Time
+        with st.expander("Total Infrastructure by Alliance Over Time"):
+            # original line chart and tables
+            pivot_infra = agg_df.pivot(index='date', columns='Alliance', values='Infrastructure')
+            chart = altair_line_chart_from_pivot(pivot_infra, "Infrastructure", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_total_infra = current_alliance_stats(agg_df, 'Infrastructure', 'Current Total Infrastructure')
+            st.markdown("#### Current Total Infrastructure by Alliance")
+            st.dataframe(current_total_infra)
+
+            infra_growth = compute_alliance_growth(agg_df, 'Infrastructure')
+            st.markdown("#### Infrastructure Growth Per Day")
+            st.dataframe(infra_growth)
+
+            # prepare percent‑change
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            # daily % change
+            daily = (pct_src.sort_values('date')
+                          .groupby(['Alliance','day']).last()
+                          .reset_index()[['Alliance','day','Infrastructure']])
+            daily['pct_change'] = (daily['Infrastructure'] / daily.groupby('Alliance')['Infrastructure'].shift(1) - 1) * 100
+
+            # monthly % change
+            monthly = (pct_src.sort_values('date')
+                            .groupby(['Alliance','month']).last()
+                            .reset_index()[['Alliance','month','Infrastructure']])
+            monthly['pct_change'] = (monthly['Infrastructure'] / monthly.groupby('Alliance')['Infrastructure'].shift(1) - 1) * 100
+
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="infra_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="infra_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Infrastructure — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="infra_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Infrastructure — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+        
+        # 8. Average Infrastructure by Alliance Over Time
+        with st.expander("Average Infrastructure by Alliance Over Time"):
+            pivot_avg_infra = agg_df.pivot(index='date', columns='Alliance', values='avg_infrastructure')
+            chart = altair_line_chart_from_pivot(pivot_avg_infra, "avg_infrastructure", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_avg_infra = current_alliance_stats(agg_df, 'avg_infrastructure', 'Current Average Infrastructure')
+            st.markdown("#### Current Average Infrastructure by Alliance")
+            st.dataframe(current_avg_infra)
+
+            avg_infra_growth = compute_alliance_growth(agg_df, 'avg_infrastructure')
+            st.markdown("#### Average Infrastructure Growth Per Day")
+            st.dataframe(avg_infra_growth)
+
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance','day']).last() \
+                .reset_index()[['Alliance','day','avg_infrastructure']]
+            daily['pct_change'] = (daily['avg_infrastructure'] / 
+                                   daily.groupby('Alliance')['avg_infrastructure'].shift(1) - 1) * 100
+
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance','month']).last() \
+                .reset_index()[['Alliance','month','avg_infrastructure']]
+            monthly['pct_change'] = (monthly['avg_infrastructure'] / 
+                                     monthly.groupby('Alliance')['avg_infrastructure'].shift(1) - 1) * 100
+
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="avg_infra_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="avg_infra_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Average Infrastructure — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="avg_infra_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Average Infrastructure — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 9. Total Base Land by Alliance Over Time
+        with st.expander("Total Base Land by Alliance Over Time"):
+            # original line chart and tables
+            pivot_base_land = agg_df.pivot(index='date', columns='Alliance', values='Base Land')
+            chart = altair_line_chart_from_pivot(pivot_base_land, "Base Land", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_total_base_land = current_alliance_stats(agg_df, 'Base Land', 'Current Total Base Land')
+            st.markdown("#### Current Total Base Land by Alliance")
+            st.dataframe(current_total_base_land)
+
+            base_land_growth = compute_alliance_growth(agg_df, 'Base Land')
+            st.markdown("#### Base Land Growth Per Day")
+            st.dataframe(base_land_growth)
+
+            # prepare percent‑change
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            # daily % change
+            daily = (pct_src.sort_values('date')
+                          .groupby(['Alliance','day']).last()
+                          .reset_index()[['Alliance','day','Base Land']])
+            daily['pct_change'] = (daily['Base Land'] / daily.groupby('Alliance')['Base Land'].shift(1) - 1) * 100
+
+            # monthly % change
+            monthly = (pct_src.sort_values('date')
+                            .groupby(['Alliance','month']).last()
+                            .reset_index()[['Alliance','month','Base Land']])
+            monthly['pct_change'] = (monthly['Base Land'] / monthly.groupby('Alliance')['Base Land'].shift(1) - 1) * 100
+
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="base_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="base_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Base Land — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="base_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Base Land — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 10. Average Base Land by Alliance Over Time
+        with st.expander("Average Base Land by Alliance Over Time"):
+            pivot_avg_base_land = agg_df.pivot(index='date', columns='Alliance', values='avg_base_land')
+            chart = altair_line_chart_from_pivot(pivot_avg_base_land, "avg_base_land", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_avg_base_land = current_alliance_stats(agg_df, 'avg_base_land', 'Current Average Base Land')
+            st.markdown("#### Current Average Base Land by Alliance")
+            st.dataframe(current_avg_base_land)
+
+            avg_base_land_growth = compute_alliance_growth(agg_df, 'avg_base_land')
+            st.markdown("#### Average Base Land Growth Per Day")
+            st.dataframe(avg_base_land_growth)
+
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance','day']).last() \
+                .reset_index()[['Alliance','day','avg_base_land']]
+            daily['pct_change'] = (daily['avg_base_land'] / 
+                                   daily.groupby('Alliance')['avg_base_land'].shift(1) - 1) * 100
+
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance','month']).last() \
+                .reset_index()[['Alliance','month','avg_base_land']]
+            monthly['pct_change'] = (monthly['avg_base_land'] / 
+                                     monthly.groupby('Alliance')['avg_base_land'].shift(1) - 1) * 100
+
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="avg_base_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="avg_base_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Average Base Land — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="avg_base_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Average Base Land — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 11. Total Strength by Alliance Over Time
+        with st.expander("Total Strength by Alliance Over Time"):
+            # original line chart and tables
+            pivot_strength = agg_df.pivot(index='date', columns='Alliance', values='Strength')
+            chart = altair_line_chart_from_pivot(pivot_strength, "Strength", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_total_strength = current_alliance_stats(agg_df, 'Strength', 'Current Total Strength')
+            st.markdown("#### Current Total Strength by Alliance")
+            st.dataframe(current_total_strength)
+
+            strength_growth = compute_alliance_growth(agg_df, 'Strength')
+            st.markdown("#### Strength Growth Per Day")
+            st.dataframe(strength_growth)
+
+            # prepare percent‑change
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            # daily % change
+            daily = (pct_src.sort_values('date')
+                          .groupby(['Alliance','day']).last()
+                          .reset_index()[['Alliance','day','Strength']])
+            daily['pct_change'] = (daily['Strength'] / daily.groupby('Alliance')['Strength'].shift(1) - 1) * 100
+
+            # monthly % change
+            monthly = (pct_src.sort_values('date')
+                            .groupby(['Alliance','month']).last()
+                            .reset_index()[['Alliance','month','Strength']])
+            monthly['pct_change'] = (monthly['Strength'] / monthly.groupby('Alliance')['Strength'].shift(1) - 1) * 100
+
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="strength_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="strength_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Strength — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="strength_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Strength — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+        
+        # 12. Average Strength by Alliance Over Time
+        with st.expander("Average Strength by Alliance Over Time"):
+            pivot_avg_strength = agg_df.pivot(index='date', columns='Alliance', values='avg_strength')
+            chart = altair_line_chart_from_pivot(pivot_avg_strength, "avg_strength", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_avg_strength = current_alliance_stats(agg_df, 'avg_strength', 'Current Average Strength')
+            st.markdown("#### Current Average Strength by Alliance")
+            st.dataframe(current_avg_strength)
+
+            avg_strength_growth = compute_alliance_growth(agg_df, 'avg_strength')
+            st.markdown("#### Average Strength Growth Per Day")
+            st.dataframe(avg_strength_growth)
+
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance','day']).last() \
+                .reset_index()[['Alliance','day','avg_strength']]
+            daily['pct_change'] = (daily['avg_strength'] / 
+                                   daily.groupby('Alliance')['avg_strength'].shift(1) - 1) * 100
+
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance','month']).last() \
+                .reset_index()[['Alliance','month','avg_strength']]
+            monthly['pct_change'] = (monthly['avg_strength'] / 
+                                     monthly.groupby('Alliance')['avg_strength'].shift(1) - 1) * 100
+
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="avg_strength_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="avg_strength_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Average Strength — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="avg_strength_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Average Strength — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 13. Total Attacking Casualties by Alliance Over Time
+        with st.expander("Total Attacking Casualties by Alliance Over Time"):
+            # original line chart and tables
+            pivot_attack = agg_df.pivot(index='date', columns='Alliance', values='Attacking Casualties')
+            chart = altair_line_chart_from_pivot(pivot_attack, "Attacking Casualties", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_attack = current_alliance_stats(agg_df, 'Attacking Casualties', 'Current Total Attacking Casualties')
+            st.markdown("#### Current Total Attacking Casualties by Alliance")
+            st.dataframe(current_attack)
+
+            attack_growth = compute_alliance_growth(agg_df, 'Attacking Casualties')
+            st.markdown("#### Attacking Casualties Growth Per Day")
+            st.dataframe(attack_growth)
+
+            # prepare percent‑change
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            # daily % change
+            daily = (pct_src.sort_values('date')
+                          .groupby(['Alliance','day']).last()
+                          .reset_index()[['Alliance','day','Attacking Casualties']])
+            daily['pct_change'] = (daily['Attacking Casualties'] / daily.groupby('Alliance')['Attacking Casualties'].shift(1) - 1) * 100
+
+            # monthly % change
+            monthly = (pct_src.sort_values('date')
+                            .groupby(['Alliance','month']).last()
+                            .reset_index()[['Alliance','month','Attacking Casualties']])
+            monthly['pct_change'] = (monthly['Attacking Casualties'] / monthly.groupby('Alliance')['Attacking Casualties'].shift(1) - 1) * 100
+
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="attack_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="attack_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Attacking Casualties — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="attack_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Attacking Casualties — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 14. Average Attacking Casualties by Alliance Over Time
+        with st.expander("Average Attacking Casualties by Alliance Over Time"):
+            pivot_avg_attack = agg_df.pivot(index='date', columns='Alliance', values='avg_attacking_casualties')
+            chart = altair_line_chart_from_pivot(pivot_avg_attack, "avg_attacking_casualties", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_avg_attack = current_alliance_stats(agg_df, 'avg_attacking_casualties', 'Current Average Attacking Casualties')
+            st.markdown("#### Current Average Attacking Casualties by Alliance")
+            st.dataframe(current_avg_attack)
+
+            avg_attack_growth = compute_alliance_growth(agg_df, 'avg_attacking_casualties')
+            st.markdown("#### Average Attacking Casualties Growth Per Day")
+            st.dataframe(avg_attack_growth)
+
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance','day']).last() \
+                .reset_index()[['Alliance','day','avg_attacking_casualties']]
+            daily['pct_change'] = (daily['avg_attacking_casualties'] / 
+                                   daily.groupby('Alliance')['avg_attacking_casualties'].shift(1) - 1) * 100
+
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance','month']).last() \
+                .reset_index()[['Alliance','month','avg_attacking_casualties']]
+            monthly['pct_change'] = (monthly['avg_attacking_casualties'] / 
+                                     monthly.groupby('Alliance')['avg_attacking_casualties'].shift(1) - 1) * 100
+
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="avg_attack_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="avg_attack_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Average Attacking Casualties — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="avg_attack_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Average Attacking Casualties — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 15. Total Defensive Casualties by Alliance Over Time
+        with st.expander("Total Defensive Casualties by Alliance Over Time"):
+            # original line chart and tables
+            pivot_defense = agg_df.pivot(index='date', columns='Alliance', values='Defensive Casualties')
+            chart = altair_line_chart_from_pivot(pivot_defense, "Defensive Casualties", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_defense = current_alliance_stats(agg_df, 'Defensive Casualties', 'Current Total Defensive Casualties')
+            st.markdown("#### Current Total Defensive Casualties by Alliance")
+            st.dataframe(current_defense)
+
+            defense_growth = compute_alliance_growth(agg_df, 'Defensive Casualties')
+            st.markdown("#### Defensive Casualties Growth Per Day")
+            st.dataframe(defense_growth)
+
+            # prepare percent‑change
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            # daily % change
+            daily = (pct_src.sort_values('date')
+                          .groupby(['Alliance','day']).last()
+                          .reset_index()[['Alliance','day','Defensive Casualties']])
+            daily['pct_change'] = (daily['Defensive Casualties'] / daily.groupby('Alliance')['Defensive Casualties'].shift(1) - 1) * 100
+
+            # monthly % change
+            monthly = (pct_src.sort_values('date')
+                            .groupby(['Alliance','month']).last()
+                            .reset_index()[['Alliance','month','Defensive Casualties']])
+            monthly['pct_change'] = (monthly['Defensive Casualties'] / monthly.groupby('Alliance')['Defensive Casualties'].shift(1) - 1) * 100
+
+            # toggle daily vs monthly
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="defense_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="defense_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Defensive Casualties — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="defense_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Defensive Casualties — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+
+        # 16. Average Defensive Casualties by Alliance Over Time
+        with st.expander("Average Defensive Casualties by Alliance Over Time"):
+            pivot_avg_defense = agg_df.pivot(index='date', columns='Alliance', values='avg_defensive_casualties')
+            chart = altair_line_chart_from_pivot(pivot_avg_defense, "avg_defensive_casualties", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
+
+            current_avg_defense = current_alliance_stats(agg_df, 'avg_defensive_casualties', 'Current Average Defensive Casualties')
+            st.markdown("#### Current Average Defensive Casualties by Alliance")
+            st.dataframe(current_avg_defense)
+
+            avg_defense_growth = compute_alliance_growth(agg_df, 'avg_defensive_casualties')
+            st.markdown("#### Average Defensive Casualties Growth Per Day")
+            st.dataframe(avg_defense_growth)
+
+            pct_src = agg_df.copy()
+            pct_src['day'] = pct_src['date'].dt.normalize()
+            pct_src['month'] = pct_src['date'].dt.to_period('M').dt.to_timestamp()
+
+            daily = pct_src.sort_values('date') \
+                .groupby(['Alliance','day']).last() \
+                .reset_index()[['Alliance','day','avg_defensive_casualties']]
+            daily['pct_change'] = (daily['avg_defensive_casualties'] / 
+                                   daily.groupby('Alliance')['avg_defensive_casualties'].shift(1) - 1) * 100
+
+            monthly = pct_src.sort_values('date') \
+                .groupby(['Alliance','month']).last() \
+                .reset_index()[['Alliance','month','avg_defensive_casualties']]
+            monthly['pct_change'] = (monthly['avg_defensive_casualties'] / 
+                                     monthly.groupby('Alliance')['avg_defensive_casualties'].shift(1) - 1) * 100
+
+            freq = st.radio("Percent Change Frequency", ["Daily", "Monthly"], key="avg_defense_pct_freq")
+            if freq == "Daily":
+                year = st.selectbox("Select Year", sorted(daily['day'].dt.year.unique()), key="avg_defense_daily_year")
+                df_year = daily[daily['day'].dt.year == year].copy()
+                df_year['Day'] = df_year['day'].dt.strftime('%m-%d')
+                pivot = df_year.pivot(index='Alliance', columns='Day', values='pct_change')
+                st.markdown(f"#### Daily % Change of Average Defensive Casualties — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
+            else:
+                year = st.selectbox("Select Year", sorted(monthly['month'].dt.year.unique()), key="avg_defense_monthly_year")
+                df_year = monthly[monthly['month'].dt.year == year].copy()
+                df_year['Month'] = df_year['month'].dt.strftime('%b')
+                pivot = df_year.pivot(index='Alliance', columns='Month', values='pct_change')
+                st.markdown(f"#### Monthly % Change of Average Defensive Casualties — {year}")
+                st.dataframe(pivot.fillna(0).style.format("{:.2f}%"))
 
     ####################################################
     # TAB 2: Individual Nation Metrics Over Time
