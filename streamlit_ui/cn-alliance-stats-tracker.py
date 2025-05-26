@@ -10,14 +10,25 @@ import io
 
 st.set_page_config(layout="wide")
 
+# point at streamlit_ui/
+BASE_DIR = Path(__file__).parent  
+PRECOMP = BASE_DIR / "precomputed"
+
 ##############################
 # HELPER FUNCTIONS
 ##############################
 
 @st.cache_data(ttl=60*60*24)
 def load_precomputed():
-    df_raw = pd.read_parquet("precomputed/raw.parquet")
-    agg_df = pd.read_parquet("precomputed/alliance_agg.parquet")
+    raw_file = PRECOMP / "raw.parquet"
+    agg_file = PRECOMP / "alliance_agg.parquet"
+
+    if not raw_file.exists() or not agg_file.exists():
+        st.error(f"Could not find precomputed files in {PRECOMP}")
+        return pd.DataFrame(), pd.DataFrame()
+
+    df_raw = pd.read_parquet(raw_file)
+    agg_df = pd.read_parquet(agg_file)
     return df_raw, agg_df
 
 def altair_line_chart_from_pivot(pivot_df, y_field, alliances, show_alliance_hover=True):
