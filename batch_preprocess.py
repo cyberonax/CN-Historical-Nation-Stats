@@ -41,11 +41,11 @@ def aggregate_by_alliance(df):
     """
     Aggregates nation stats by snapshot_date and Alliance.
     """
+    # ensure numeric columns are numeric
     numeric_cols = [
         'Technology', 'Infrastructure', 'Base Land',
         'Strength', 'Attacking Casualties', 'Defensive Casualties'
     ]
-
     for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(
@@ -53,6 +53,7 @@ def aggregate_by_alliance(df):
                 errors='coerce'
             )
 
+    # include Empty Slots Count here
     agg_dict = {
         'Nation ID': 'count',
         'Technology': 'sum',
@@ -61,6 +62,7 @@ def aggregate_by_alliance(df):
         'Strength': 'sum',
         'Attacking Casualties': 'sum',
         'Defensive Casualties': 'sum',
+        'Empty Slots Count': 'sum',
     }
 
     return (
@@ -113,16 +115,25 @@ def main():
     print("▶️  Loading all ZIPs…")
     raw = load_all_zips()
 
-    # 2) Prepare output dir under streamlit_ui/precomputed
+    # 2) Compute Empty Slots Count on the raw DataFrame
+    resource_cols = [f"Connected Resource {i}" for i in range(1, 11)]
+    raw['Empty Slots Count'] = (
+        raw[resource_cols]
+        .isna()
+        .sum(axis=1)
+        .floordiv(2)
+    )
+
+    # 3) Prepare output dir under streamlit_ui/precomputed
     out_dir = Path(__file__).parent / "streamlit_ui" / "precomputed"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 3) Save raw parquet
+    # 4) Save raw parquet
     raw_out = out_dir / "raw.parquet"
     raw.to_parquet(raw_out, index=False)
     print(f"✅  Wrote raw data to {raw_out}")
 
-    # 4) Compute & save alliance aggregates
+    # 5) Compute & save alliance aggregates
     print("▶️  Computing alliance aggregates…")
     agg = aggregate_by_alliance(raw).rename(columns={"snapshot_date": "date"})
     agg_out = out_dir / "alliance_agg.parquet"
