@@ -378,8 +378,8 @@ def main():
             start_date, end_date = date_range
             df_agg = df_agg[(df_agg['date'] >= start_date) & (df_agg['date'] <= end_date)]
         
-        with st.expander("Show Raw Aggregated Data"):
-            st.dataframe(df_agg)
+        # with st.expander("Show Raw Aggregated Data"):
+        #     st.dataframe(df_agg)
         
         # Aggregate data by alliance.
         agg_df = aggregate_by_alliance(df_agg)
@@ -394,8 +394,8 @@ def main():
         agg_df['avg_base_land'] = agg_df['Base Land'] / agg_df['nation_count']
         agg_df['avg_strength'] = agg_df['Strength'] / agg_df['nation_count']
         
-        with st.expander("Show Aggregated Alliance Data Table"):
-            st.dataframe(agg_df.sort_values('date'))
+        # with st.expander("Show Aggregated Alliance Data Table"):
+        #     st.dataframe(agg_df.sort_values('date'))
         
         ##############
         # CHARTS USING ALTAIR FOR AGGREGATED DATA
@@ -1155,8 +1155,8 @@ def main():
         valid_nations = set(candidate[candidate['date']==candidate['date'].max()]["Nation ID"]) if not candidate.empty else set()
     
         df_indiv = df_raw[(df_raw["Alliance"]==selected_alliance_ind)&(df_raw["Nation ID"].isin(valid_nations))].copy()
-        with st.expander("Show Raw Nation Data"): st.dataframe(df_indiv)
-        st.markdown(f"### Charts for Alliance: {selected_alliance_ind}")
+        # with st.expander("Show Raw Nation Data"): st.dataframe(df_indiv)
+        # st.markdown(f"### Charts for Alliance: {selected_alliance_ind}")
     
             # (a) Nation Activity Distribution Over Time
         if 'activity_score' in df_indiv.columns:
