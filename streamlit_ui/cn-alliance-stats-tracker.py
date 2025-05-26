@@ -403,20 +403,26 @@ def main():
 
         # 4. % of Nations with Empty Trade Slots Over Time
         with st.expander("% of Nations with Empty Trade Slots Over Time"):
-            df = (df_agg
-                  .groupby(['date','Alliance'])
-                  .agg(total=('Nation ID','count'),
-                       empty=('Empty Slots Count', lambda s: (s>0).sum()))
-                  .assign(percent_empty=lambda d: d.empty/d.total*100))
-            st.altair_chart(
-                altair_line_chart_from_pivot(
-                    df.pivot('date','Alliance','percent_empty'),
-                    'percent_empty',
-                    selected_alliances,
-                    display_alliance_hover
-                ),
-                use_container_width=True
+            # total = precomputed nation_count
+            total = df_agg[['date','Alliance','nation_count']].rename(columns={'nation_count':'total'})
+            # empties = count of nations with >0 empty slots, computed from the RAW data
+            empties = (
+                df_raw[df_raw['Empty Slots Count'] > 0]
+                .groupby(['date','Alliance'])
+                .agg(empty=('Nation ID','count'))
+                .reset_index()
             )
+            # merge and compute %
+            pct = (
+                total
+                .merge(empties, on=['date','Alliance'], how='left')
+                .fillna({'empty': 0})
+            )
+            pct['percent_empty'] = pct['empty'] / pct['total'] * 100
+        
+            pivot = pct.pivot(index='date', columns='Alliance', values='percent_empty')
+            chart = altair_line_chart_from_pivot(pivot, "percent_empty", selected_alliances, display_alliance_hover)
+            st.altair_chart(chart, use_container_width=True)
 
             current_empty_percent = ratio_df.sort_values('date') \
                 .groupby('Alliance').last().reset_index()[['Alliance', 'percent_empty']] \
