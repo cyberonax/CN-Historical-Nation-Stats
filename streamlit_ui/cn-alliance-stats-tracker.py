@@ -318,10 +318,10 @@ def main():
             chart = altair_line_chart_from_pivot(pivot_count, "nation_count", selected_alliances, display_alliance_hover)
             st.altair_chart(chart, use_container_width=True)
             # Display current and growth tables for Nation Count.
-            current_nation_count = current_alliance_stats(agg_df, 'nation_count', 'Current Nation Count')
+            current_nation_count = current_alliance_stats(df_agg, 'nation_count', 'Current Nation Count')
             st.markdown("#### Current Nation Count by Alliance")
             st.dataframe(current_nation_count)
-            nation_count_growth = compute_alliance_growth(agg_df, 'nation_count')
+            nation_count_growth = compute_alliance_growth(df_agg, 'nation_count')
             nation_count_growth.rename(columns={"nation_count Growth Per Day": "Nation Count Growth Per Day"}, inplace=True)
             st.markdown("#### Nation Count Growth Per Day")
             st.dataframe(nation_count_growth)
