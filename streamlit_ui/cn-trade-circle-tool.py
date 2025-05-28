@@ -1172,21 +1172,31 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                         prob.solve(pulp.PULP_CBC_CMD(msg=False))
 
-                        # 4) Extract assignments
+                        # 4) Extract assignments with tolerance + fallback
                         assignment = {}
                         for p in players:
-                            for i in range(len(pairs)):
-                                if pulp.value(x[p][i]) == 1:
-                                    assignment[p] = pairs[i]
+                            chosen = None
+                            for i, pair in enumerate(pairs):
+                                val = pulp.value(x[p][i])
+                                if val is not None and val > 0.5:
+                                    chosen = pair
                                     break
-
+                            if chosen is None:
+                                # fallback to peacetime pair if solver gave up
+                                chosen = tuple(
+                                    group.loc[group["Ruler Name"] == p, "Assigned Resource 1+2"]
+                                         .iloc[0]
+                                         .split(",")
+                                )
+                            assignment[p] = chosen
+                    
                         # 5) Record into adj_records
                         for p in players:
-                            row = group[group["Ruler Name"]==p].iloc[0].to_dict()
+                            row = group[group["Ruler Name"] == p].iloc[0].to_dict()
                             pair = assignment[p]
                             adj_records.append({
                                 **row,
-                                "Assigned Resource 1+2": f"{pair[0]}, {pair[1]}",
+                                "Assigned Resource 1+2": f"{pair[0].strip()}, {pair[1].strip()}",
                                 "Assigned Valid Resource Combination": combo_str
                             })
 
