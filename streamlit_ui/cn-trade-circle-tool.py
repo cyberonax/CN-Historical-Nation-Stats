@@ -1101,17 +1101,112 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     height=60,
                 )
 
+        # ——— Assign Wartime Recommended Resources ———
+        # Adjusted Wartime Recommended Resources (Based on Peacetime Assignments)
+        with st.expander("Assign Wartime Recommended Resources (Adjusted)"):
+            if 'rec_df' not in locals() or rec_df.empty:
+                st.markdown("_No Peacetime assignments found. Please run the Peacetime section first._")
+            else:
+                import numpy as np
+                from scipy.optimize import linear_sum_assignment
+                from collections import Counter
+        
+                # map peacetime assignments
+                peace_map = rec_df.set_index('Ruler Name')['Assigned Resource 1+2'].to_dict()
+                war_combos = [ [r.strip() for r in line.split(",")] for line in war_text.splitlines() if line.strip() ]
+        
+                war_records_adj = []
+                for level in ["Level A", "Level B", "Level C"]:
+                    lvl_df = opt_df[opt_df["Peace Mode Level"] == level]
+                    if lvl_df.empty: continue
+                    for circle in sorted(lvl_df["Trade Circle"].unique()):
+                        group = lvl_df[lvl_df["Trade Circle"] == circle].reset_index(drop=True)
+                        # collect from peacetime assignments
+                        all_res = []
+                        for ruler in group['Ruler Name']:
+                            pair = peace_map.get(ruler, group.loc[group['Ruler Name']==ruler,'Resource 1+2'].iloc[0])
+                            all_res += [r.strip() for r in pair.split(",")]
+                        best_combo = find_best_match(sorted(set(all_res)), war_combos)
+                        combo_str = ", ".join(best_combo)
+        
+                        avail = Counter(best_combo)
+                        fixed, rem_players = {}, []
+                        for _, row in group.iterrows():
+                            ruler = row['Ruler Name']
+                            curr = tuple(r.strip() for r in peace_map.get(ruler, row['Resource 1+2']).split(","))
+                            if avail[curr[0]]>0 and avail[curr[1]]>0:
+                                fixed[ruler] = ", ".join(curr)
+                                avail[curr[0]]-=1; avail[curr[1]]-=1
+                            else:
+                                rem_players.append(ruler)
+        
+                        rem_res = list(avail.elements())
+                        m = len(rem_players)
+                        slices = [ rem_res[2*i:2*i+2] for i in range(m) ]
+                        cost = np.zeros((m,m),dtype=int)
+                        for i,ruler in enumerate(rem_players):
+                            curr = sorted(r.strip() for r in peace_map.get(ruler,"").split(","))
+                            for j,sl in enumerate(slices): cost[i,j] = 2-len(set(curr)&set(sl))
+                        rows,cols = linear_sum_assignment(cost)
+        
+                        for ruler,pair in fixed.items():
+                            row = group[group['Ruler Name']==ruler].iloc[0]
+                            war_records_adj.append({**row.to_dict(),
+                                                    'Assigned Resource 1+2': pair,
+                                                    'Assigned Valid Resource Combination': combo_str})
+                        for i,j in zip(rows,cols):
+                            ruler = rem_players[i]; sl = slices[j]
+                            row = group[group['Ruler Name']==ruler].iloc[0]
+                            war_records_adj.append({**row.to_dict(),
+                                                    'Assigned Resource 1+2': f"{sl[0]}, {sl[1]}",
+                                                    'Assigned Valid Resource Combination': combo_str})
+        
+                # build adjusted DataFrame
+                war_df_adj = pd.DataFrame(war_records_adj).sort_values(
+                    ["Peace Mode Level","Trade Circle","Ruler Name"],
+                    key=lambda col: (col.map(level_order) if col.name=='Peace Mode Level' else col)
+                ).reset_index(drop=True)
+                war_df_adj.index += 1
+                war_df_adj["Activity"] = war_df_adj["Activity"].round(1)
+        
+                # display adjusted table only
+                st.markdown("##### Adjusted Wartime Recommended Resources")
+                styled_adj = (
+                    war_df_adj[columns]
+                    .style.format({"Activity":"{:.1f}"})
+                    .set_properties(subset=["Assigned Valid Resource Combination"], **{
+                        "white-space":"normal","max-width":"1200px","text-align":"left"
+                    })
+                )
+                st.dataframe(styled_adj, use_container_width=True)
+        
+                # Copy-to-Clipboard for Adjusted Wartime
+                war_csv_adj = war_df_adj.to_csv(index=False)
+                components.html(
+                    f"""
+                    <textarea id="war-adj-data" style="display:none;">{war_csv_adj}</textarea>
+                    <button
+                      onclick="navigator.clipboard.writeText(document.getElementById('war-adj-data').value)"
+                      style="margin-top:10px; padding:4px 8px;"
+                    >
+                      Copy Adjusted Wartime Table to Clipboard
+                    </button>
+                    """,
+                    height=60,
+                )
+
         # ——— Download everything as a single XLSX (with auto‑fit columns) ———
-        if 'rec_df' in locals() and 'war_df' in locals():
+        if 'rec_df' in locals() and 'war_df' in locals() and 'war_df_adj' in locals():
             buffer = io.BytesIO()
             # use xlsxwriter so we can set column widths
             with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                 rec_df.to_excel(writer, sheet_name="Peacetime", index=False)
                 war_df.to_excel(writer, sheet_name="Wartime",    index=False)
-
+                war_df_adj.to_excel(writer, sheet_name="Wartime (Adjusted)",    index=False)
                 workbook    = writer.book
                 peac_sheet  = writer.sheets["Peacetime"]
                 war_sheet   = writer.sheets["Wartime"]
+                war_adj_sheet   = writer.sheets["Wartime (Adjusted)"]
 
                 # auto‑fit Peacetime columns
                 for idx, col in enumerate(rec_df.columns):
@@ -1128,6 +1223,14 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         len(col)
                     ) + 2
                     war_sheet.set_column(idx, idx, max_len)
+
+                # auto‑fit Wartime (Adjusted) columns
+                for idx, col in enumerate(war_df_adj.columns):
+                    max_len = max(
+                        war_df_adj[col].astype(str).map(len).max(),
+                        len(col)
+                    ) + 2
+                    war_adj_sheet.set_column(idx, idx, max_len)
 
             buffer.seek(0)
 
