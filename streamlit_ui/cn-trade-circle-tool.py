@@ -1106,10 +1106,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
             if 'rec_df' not in locals() or rec_df.empty:
                 st.markdown("_Run Peacetime assignments first._")
             else:
-                import itertools
-                import pulp
+                from collections import Counter
 
-                # parse your War Mode 12-resource combos
+                # parse War Mode valid 12-resource combos
                 war_combos = [
                     [r.strip() for r in line.split(",")]
                     for line in war_text.splitlines() if line.strip()
@@ -1122,102 +1121,69 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         continue
 
                     for circle in sorted(lvl_rec["Trade Circle"].unique()):
-                        group = (
-                            lvl_rec[lvl_rec["Trade Circle"] == circle]
-                            .reset_index(drop=True)
+                        group = lvl_rec[lvl_rec["Trade Circle"] == circle].reset_index(drop=True)
+
+                        # 1) pick the best combo (minimize symmetric difference)
+                        all_peace = sum((s.split(",") for s in group["Assigned Resource 1+2"]), [])
+                        all_peace = [r.strip() for r in all_peace]
+                        best_combo = min(
+                            war_combos,
+                            key=lambda combo: len(set(combo) ^ set(all_peace))
                         )
-                        players   = group["Ruler Name"].tolist()
-
-                        # Precompute each player's peacetime set
-                        peacemap = {
-                            p: set(
-                                group.loc[group["Ruler Name"] == p,
-                                          "Assigned Resource 1+2"]
-                                     .iloc[0]
-                                     .split(",")
-                            )
-                            for p in players
-                        }
-
-                        best_total_cost = float("inf")
-                        best_combo      = None
-                        best_assign     = None
-
-                        # Try each 12-resource combo
-                        for combo in war_combos:
-                            resources = combo
-                            pairs     = list(itertools.combinations(resources, 2))
-
-                            # Build IP
-                            prob = pulp.LpProblem(f"WAR_{level}_{circle}", pulp.LpMinimize)
-                            x = pulp.LpVariable.dicts("x", (players, range(len(pairs))), cat="Binary")
-
-                            # 1 player → 1 pair
-                            for p in players:
-                                prob += pulp.lpSum(x[p][i] for i in range(len(pairs))) == 1
-                            # each resource used exactly once
-                            for r in resources:
-                                prob += pulp.lpSum(
-                                    x[p][i]
-                                    for p in players
-                                    for i, pr in enumerate(pairs)
-                                    if r in pr
-                                ) == 1
-
-                            # objective: sum mismatches
-                            prob += pulp.lpSum(
-                                (2 - len(peacemap[p] & set(pairs[i]))) * x[p][i]
-                                for p in players for i in range(len(pairs))
-                            )
-
-                            prob.solve(pulp.PULP_CBC_CMD(msg=False))
-
-                            # If not optimal, skip
-                            if pulp.LpStatus[prob.status] != "Optimal":
-                                continue
-
-                            total_cost = pulp.value(prob.objective)
-                            if total_cost < best_total_cost:
-                                # extract assignment
-                                assign = {}
-                                for p in players:
-                                    for i in range(len(pairs)):
-                                        val = pulp.value(x[p][i])
-                                        if val is not None and val > 0.5:
-                                            assign[p] = pairs[i]
-                                            break
-                                # sanity: all players assigned?
-                                if len(assign) == len(players):
-                                    best_total_cost = total_cost
-                                    best_combo      = combo
-                                    best_assign     = assign
-
-                        # fallback if none found
-                        if best_combo is None:
-                            best_combo  = war_combos[0]
-                            best_assign = {p: tuple(peacemap[p]) for p in players}
-
                         combo_str = ", ".join(best_combo)
 
-                        # record best_assign
-                        for p in players:
-                            row  = group[group["Ruler Name"] == p].iloc[0].to_dict()
-                            pair = best_assign[p]
-                            adj_records.append({
-                                **row,
+                        # 2) prepare availability & records
+                        avail = Counter(best_combo)
+                        # record for each ruler: kept, and how many to fill
+                        to_fill = []
+                        assignments = {}
+
+                        # first pass: preserve any overlapping resources
+                        for _, row in group.iterrows():
+                            p = row["Ruler Name"]
+                            peace_pair = [r.strip() for r in row["Assigned Resource 1+2"].split(",")]
+                            keep = [r for r in peace_pair if avail[r] > 0]
+                            for r in keep:
+                                avail[r] -= 1
+                            assignments[p] = keep
+                            to_fill.append((p, 2 - len(keep)))  # slots to fill
+
+                        # sort so those with 0 slots to fill (kept both) don't go into filling logic
+                        to_fill.sort(key=lambda x: x[1])  # (p,0) first, then (p,1), then (p,2)
+
+                        # 3) fill each ruler’s remaining slot(s) from the leftover avail
+                        leftovers = list(avail.elements())
+                        idx = 0
+                        for p, slots in to_fill:
+                            for _ in range(slots):
+                                r = leftovers[idx]
+                                assignments[p].append(r)
+                                idx += 1
+
+                        # 4) record into adj_records
+                        for _, row in group.iterrows():
+                            p = row["Ruler Name"]
+                            pair = assignments[p]
+                            rec = row.to_dict()
+                            rec.update({
                                 "Assigned Resource 1+2": f"{pair[0]}, {pair[1]}",
                                 "Assigned Valid Resource Combination": combo_str
                             })
+                            adj_records.append(rec)
 
-                # Build & display DataFrame
-                adj_war_df = pd.DataFrame(adj_records).sort_values(
-                    ["Peace Mode Level","Trade Circle","Ruler Name"],
-                    key=lambda col: (
-                        col.map(level_order) if col.name=="Peace Mode Level"
-                        else col if col.name=="Trade Circle"
-                        else col.str.lower()
-                    )
-                ).reset_index(drop=True)
+                # build DataFrame and display
+                adj_war_df = (
+                    pd.DataFrame(adj_records)
+                      .sort_values(
+                          ["Peace Mode Level","Trade Circle","Ruler Name"],
+                          key=lambda col: (
+                              col.map(level_order) if col.name=="Peace Mode Level"
+                              else col if col.name=="Trade Circle"
+                              else col.str.lower()
+                          )
+                      )
+                      .reset_index(drop=True)
+                )
                 adj_war_df.index += 1
                 adj_war_df["Activity"] = adj_war_df["Activity"].round(1)
 
@@ -1230,7 +1196,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 st.markdown("##### Assign Wartime Recommended Resources (Aligned)")
                 st.dataframe(adj_war_df[cols], use_container_width=True)
 
-                # Copy-to-Clipboard
+                # Copy to clipboard
                 adj_csv = adj_war_df.to_csv(index=False)
                 components.html(
                     f'''
