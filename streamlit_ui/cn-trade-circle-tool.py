@@ -1106,11 +1106,10 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
             if 'rec_df' not in locals() or rec_df.empty:
                 st.markdown("_Run Peacetime assignments first._")
             else:
-                import numpy as np
+                import itertools
                 import pulp
-                from collections import Counter
 
-                # parse War Mode valid 12-resource combos
+                # parse your War Mode 12-resource combos
                 war_combos = [
                     [r.strip() for r in line.split(",")]
                     for line in war_text.splitlines() if line.strip()
@@ -1123,15 +1122,11 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         continue
 
                     for circle in sorted(lvl_rec["Trade Circle"].unique()):
-                        group = (
-                            lvl_rec[lvl_rec["Trade Circle"] == circle]
-                            .reset_index(drop=True)
-                        )
+                        group = lvl_rec[lvl_rec["Trade Circle"] == circle].reset_index(drop=True)
 
-                        # 1) pick best 12-resource combo to use
-                        all_res = []
-                        for s in group["Assigned Resource 1+2"]:
-                            all_res += [r.strip() for r in s.split(",") if r.strip()]
+                        # 1) Choose the best 12-combo as before
+                        all_res = sum((s.split(",") for s in group["Assigned Resource 1+2"]), [])
+                        all_res = [r.strip() for r in all_res]
                         best_combo = min(
                             war_combos,
                             key=lambda combo: len(set(combo) ^ set(all_res))
@@ -1140,71 +1135,80 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                         players   = group["Ruler Name"].tolist()
                         resources = best_combo
+                        pairs     = list(itertools.combinations(resources, 2))
 
-                        # 2) cost[p,r] = 0 if r in their peacetime pair, else 1
+                        # 2) Compute cost[p,pair] = number of mismatches from their peacetime pair
                         cost = {}
+                        orig_map = {
+                            p: set(group.loc[group["Ruler Name"]==p, "Assigned Resource 1+2"].iloc[0].split(","))
+                            for p in players
+                        }
                         for p in players:
-                            peacetime = set(
-                                group.loc[group["Ruler Name"] == p, "Assigned Resource 1+2"]
-                                     .iloc[0]
-                                     .split(",")
-                            )
-                            for r in resources:
-                                cost[(p, r)] = 0 if r in peacetime else 1
+                            orig = orig_map[p]
+                            for pair in pairs:
+                                cost[(p,pair)] = 2 - len(orig & set(pair))
 
-                        # 3) build LP
-                        prob = pulp.LpProblem(f"Wartime_{level}_{circle}", pulp.LpMinimize)
-                        x = pulp.LpVariable.dicts("x", (players, resources), cat="Binary")
+                        # 3) Build IP: x[p,pair] ∈{0,1}
+                        prob = pulp.LpProblem(f"WAR_ADJ_{level}_{circle}", pulp.LpMinimize)
+                        x = pulp.LpVariable.dicts("x", (players, range(len(pairs))), cat="Binary")
 
-                        # each player exactly 2 resources
+                        # each player picks exactly one pair
                         for p in players:
-                            prob += pulp.lpSum(x[p][r] for r in resources) == 2
+                            prob += pulp.lpSum(x[p][i] for i in range(len(pairs))) == 1
 
-                        # each resource assigned once
+                        # each resource used exactly once across all players
                         for r in resources:
-                            prob += pulp.lpSum(x[p][r] for p in players) == 1
+                            prob += pulp.lpSum(
+                                x[p][i] for p in players
+                                      for i,pair in enumerate(pairs)
+                                      if r in pair
+                            ) == 1
 
-                        # objective: minimize total cost
-                        prob += pulp.lpSum(cost[(p, r)] * x[p][r]
-                                           for p in players for r in resources)
+                        # objective: minimize total pair-mismatches
+                        prob += pulp.lpSum(
+                            cost[(p,pairs[i])] * x[p][i]
+                            for p in players for i in range(len(pairs))
+                        )
 
                         prob.solve(pulp.PULP_CBC_CMD(msg=False))
 
-                        # 4) extract assignments
-                        assignments = {
-                            p: [r for r in resources if pulp.value(x[p][r]) == 1]
-                            for p in players
-                        }
-
-                        # 5) record into adj_records
+                        # 4) Extract assignments
+                        assignment = {}
                         for p in players:
-                            row = group[group["Ruler Name"] == p].iloc[0].to_dict()
-                            pair = assignments[p]
+                            for i in range(len(pairs)):
+                                if pulp.value(x[p][i]) == 1:
+                                    assignment[p] = pairs[i]
+                                    break
+
+                        # 5) Record into adj_records
+                        for p in players:
+                            row = group[group["Ruler Name"]==p].iloc[0].to_dict()
+                            pair = assignment[p]
                             adj_records.append({
                                 **row,
-                                "Assigned Resource 1+2": ", ".join(pair),
+                                "Assigned Resource 1+2": f"{pair[0]}, {pair[1]}",
                                 "Assigned Valid Resource Combination": combo_str
                             })
 
-                # build DataFrame and style
+                # Build DataFrame
                 adj_war_df = pd.DataFrame(adj_records).sort_values(
-                    ["Peace Mode Level", "Trade Circle", "Ruler Name"],
+                    ["Peace Mode Level","Trade Circle","Ruler Name"],
                     key=lambda col: (
-                        col.map(level_order) if col.name == "Peace Mode Level"
-                        else col if col.name == "Trade Circle"
+                        col.map(level_order) if col.name=="Peace Mode Level"
+                        else col if col.name=="Trade Circle"
                         else col.str.lower()
                     )
                 ).reset_index(drop=True)
                 adj_war_df.index += 1
                 adj_war_df["Activity"] = adj_war_df["Activity"].round(1)
 
+                # Display
                 cols = [
                     "Peace Mode Level","Trade Circle","Ruler Name",
                     "Current Resource 1+2","Assigned Resource 1+2",
                     "Assigned Valid Resource Combination",
                     "Alliance","Team","Days Old","Nation Drill Link","Activity"
                 ]
-
                 st.markdown("##### Assign Wartime Recommended Resources (Aligned)")
                 st.dataframe(adj_war_df[cols], use_container_width=True)
 
