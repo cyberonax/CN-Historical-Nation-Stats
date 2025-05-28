@@ -1121,6 +1121,7 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                             best       = combo
                     return best
 
+                # parse War Mode valid 12-resource combos
                 war_combos = [
                     [r.strip() for r in line.split(",")]
                     for line in war_text.splitlines() if line.strip()
@@ -1160,25 +1161,33 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         m = len(rem_players)
                         slices = [ rem_res[2*i:2*i+2] for i in range(m) ]
 
+                        # build cost matrix and solve Hungarian
                         cost = np.zeros((m, m), dtype=int)
                         for i, ruler in enumerate(rem_players):
-                            curr = sorted(r for r in group.loc[group["Ruler Name"]==ruler, "Assigned Resource 1+2"].split(","))
+                            # <— grab the scalar string before splitting:
+                            curr_str = group.loc[
+                                group["Ruler Name"] == ruler, 
+                                "Assigned Resource 1+2"
+                            ].iloc[0]
+                            curr = sorted(r.strip() for r in curr_str.split(","))
                             for j, sl in enumerate(slices):
-                                cost[i,j] = 2 - len(set(curr).intersection(sl))
+                                cost[i, j] = 2 - len(set(curr).intersection(sl))
                         rows, cols = linear_sum_assignment(cost)
 
-                        for ruler,pair in fixed.items():
-                            row = group[group["Ruler Name"]==ruler].iloc[0]
+                        # record locked-in players
+                        for ruler, pair in fixed.items():
+                            row = group[group["Ruler Name"] == ruler].iloc[0]
                             adj_records.append({
                                 **row.to_dict(),
                                 "Assigned Resource 1+2": pair,
                                 "Assigned Valid Resource Combination": combo_str
                             })
-                        for i,j in zip(rows,cols):
+                        # record Hungarian-assigned players
+                        for i, j in zip(rows, cols):
                             ruler = rem_players[i]
                             sl    = slices[j]
                             assigned = f"{sl[0]}, {sl[1]}"
-                            row = group[group["Ruler Name"]==ruler].iloc[0]
+                            row = group[group["Ruler Name"] == ruler].iloc[0]
                             adj_records.append({
                                 **row.to_dict(),
                                 "Assigned Resource 1+2": assigned,
