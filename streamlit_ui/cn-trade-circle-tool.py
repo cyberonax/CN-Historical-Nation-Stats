@@ -1207,9 +1207,9 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
 
                 cols = [
                     "Peace Mode Level","Trade Circle","Ruler Name",
-                    "Current Resource 1+2","Assigned Resource 1+2",
-                    "Assigned Valid Resource Combination",
-                    "Alliance","Team","Days Old","Nation Drill Link","Activity"
+                    "Current Resource 1+2","Alliance","Team",
+                    "Days Old","Nation Drill Link","Activity",
+                    "Assigned Resource 1+2","Assigned Valid Resource Combination"
                 ]
 
                 st.markdown("##### Assign Wartime Recommended Resources (Aligned)")
