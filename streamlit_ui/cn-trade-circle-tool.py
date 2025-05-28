@@ -1101,112 +1101,136 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     height=60,
                 )
 
-        # ——— Assign Wartime Recommended Resources ———
-        # Adjusted Wartime Recommended Resources (Based on Peacetime Assignments)
-        with st.expander("Assign Wartime Recommended Resources (Adjusted)"):
+        # ——— Assign Wartime Recommended Resources (Aligned to Peacetime Assignments) ———
+        with st.expander("Assign Wartime Recommended Resources (Aligned to Peacetime)"):
             if 'rec_df' not in locals() or rec_df.empty:
-                st.markdown("_No Peacetime assignments found. Please run the Peacetime section first._")
+                st.markdown("_Run Peacetime assignments first._")
             else:
                 import numpy as np
                 from scipy.optimize import linear_sum_assignment
                 from collections import Counter
-        
-                # map peacetime assignments
-                peace_map = rec_df.set_index('Ruler Name')['Assigned Resource 1+2'].to_dict()
-                war_combos = [ [r.strip() for r in line.split(",")] for line in war_text.splitlines() if line.strip() ]
-        
-                war_records_adj = []
-                for level in ["Level A", "Level B", "Level C"]:
-                    lvl_df = opt_df[opt_df["Peace Mode Level"] == level]
-                    if lvl_df.empty: continue
-                    for circle in sorted(lvl_df["Trade Circle"].unique()):
-                        group = lvl_df[lvl_df["Trade Circle"] == circle].reset_index(drop=True)
-                        # collect from peacetime assignments
+
+                def find_best_match(current, combos):
+                    best, best_score = None, float("inf")
+                    for combo in combos:
+                        missing = set(combo) - set(current)
+                        extra   = set(current) - set(combo)
+                        score   = len(missing) + len(extra)
+                        if score < best_score:
+                            best_score = score
+                            best       = combo
+                    return best
+
+                war_combos = [
+                    [r.strip() for r in line.split(",")]
+                    for line in war_text.splitlines() if line.strip()
+                ]
+
+                adj_records = []
+                for level in ["Level A","Level B","Level C"]:
+                    lvl_rec = rec_df[rec_df["Peace Mode Level"] == level]
+                    if lvl_rec.empty:
+                        continue
+                    for circle in sorted(lvl_rec["Trade Circle"].unique()):
+                        group = lvl_rec[lvl_rec["Trade Circle"] == circle].reset_index(drop=True)
+
+                        # base “current” on Peacetime assignments
                         all_res = []
-                        for ruler in group['Ruler Name']:
-                            pair = peace_map.get(ruler, group.loc[group['Ruler Name']==ruler,'Resource 1+2'].iloc[0])
-                            all_res += [r.strip() for r in pair.split(",")]
-                        best_combo = find_best_match(sorted(set(all_res)), war_combos)
-                        combo_str = ", ".join(best_combo)
-        
+                        for s in group["Assigned Resource 1+2"]:
+                            all_res += [r.strip() for r in s.split(",") if r.strip()]
+                        current_sorted = sorted(set(all_res))
+
+                        best_combo = find_best_match(current_sorted, war_combos)
+                        combo_str  = ", ".join(best_combo)
+
                         avail = Counter(best_combo)
-                        fixed, rem_players = {}, []
+                        fixed = {}
+                        rem_players = []
                         for _, row in group.iterrows():
-                            ruler = row['Ruler Name']
-                            curr = tuple(r.strip() for r in peace_map.get(ruler, row['Resource 1+2']).split(","))
-                            if avail[curr[0]]>0 and avail[curr[1]]>0:
-                                fixed[ruler] = ", ".join(curr)
-                                avail[curr[0]]-=1; avail[curr[1]]-=1
+                            ruler = row["Ruler Name"]
+                            curr_pair = tuple(r.strip() for r in row["Assigned Resource 1+2"].split(","))
+                            if avail[curr_pair[0]] > 0 and avail[curr_pair[1]] > 0:
+                                fixed[ruler] = row["Assigned Resource 1+2"]
+                                avail[curr_pair[0]] -= 1
+                                avail[curr_pair[1]] -= 1
                             else:
                                 rem_players.append(ruler)
-        
+
                         rem_res = list(avail.elements())
                         m = len(rem_players)
                         slices = [ rem_res[2*i:2*i+2] for i in range(m) ]
-                        cost = np.zeros((m,m),dtype=int)
-                        for i,ruler in enumerate(rem_players):
-                            curr = sorted(r.strip() for r in peace_map.get(ruler,"").split(","))
-                            for j,sl in enumerate(slices): cost[i,j] = 2-len(set(curr)&set(sl))
-                        rows,cols = linear_sum_assignment(cost)
-        
+
+                        cost = np.zeros((m, m), dtype=int)
+                        for i, ruler in enumerate(rem_players):
+                            curr = sorted(r for r in group.loc[group["Ruler Name"]==ruler, "Assigned Resource 1+2"].split(","))
+                            for j, sl in enumerate(slices):
+                                cost[i,j] = 2 - len(set(curr).intersection(sl))
+                        rows, cols = linear_sum_assignment(cost)
+
                         for ruler,pair in fixed.items():
-                            row = group[group['Ruler Name']==ruler].iloc[0]
-                            war_records_adj.append({**row.to_dict(),
-                                                    'Assigned Resource 1+2': pair,
-                                                    'Assigned Valid Resource Combination': combo_str})
+                            row = group[group["Ruler Name"]==ruler].iloc[0]
+                            adj_records.append({
+                                **row.to_dict(),
+                                "Assigned Resource 1+2": pair,
+                                "Assigned Valid Resource Combination": combo_str
+                            })
                         for i,j in zip(rows,cols):
-                            ruler = rem_players[i]; sl = slices[j]
-                            row = group[group['Ruler Name']==ruler].iloc[0]
-                            war_records_adj.append({**row.to_dict(),
-                                                    'Assigned Resource 1+2': f"{sl[0]}, {sl[1]}",
-                                                    'Assigned Valid Resource Combination': combo_str})
-        
-                # build adjusted DataFrame
-                war_df_adj = pd.DataFrame(war_records_adj).sort_values(
+                            ruler = rem_players[i]
+                            sl    = slices[j]
+                            assigned = f"{sl[0]}, {sl[1]}"
+                            row = group[group["Ruler Name"]==ruler].iloc[0]
+                            adj_records.append({
+                                **row.to_dict(),
+                                "Assigned Resource 1+2": assigned,
+                                "Assigned Valid Resource Combination": combo_str
+                            })
+
+                adj_war_df = pd.DataFrame(adj_records).sort_values(
                     ["Peace Mode Level","Trade Circle","Ruler Name"],
-                    key=lambda col: (col.map(level_order) if col.name=='Peace Mode Level' else col)
+                    key=lambda col: (
+                        col.map(level_order) if col.name=="Peace Mode Level"
+                        else col if col.name=="Trade Circle"
+                        else col.str.lower()
+                    )
                 ).reset_index(drop=True)
-                war_df_adj.index += 1
-                war_df_adj["Activity"] = war_df_adj["Activity"].round(1)
-        
-                # display adjusted table only
-                st.markdown("##### Adjusted Wartime Recommended Resources")
-                styled_adj = (
-                    war_df_adj[columns]
-                    .style.format({"Activity":"{:.1f}"})
-                    .set_properties(subset=["Assigned Valid Resource Combination"], **{
-                        "white-space":"normal","max-width":"1200px","text-align":"left"
-                    })
-                )
-                st.dataframe(styled_adj, use_container_width=True)
-        
-                # Copy-to-Clipboard for Adjusted Wartime
-                war_csv_adj = war_df_adj.to_csv(index=False)
+                adj_war_df.index += 1
+                adj_war_df["Activity"] = adj_war_df["Activity"].round(1)
+
+                cols = [
+                    "Peace Mode Level","Trade Circle","Ruler Name",
+                    "Current Resource 1+2","Assigned Resource 1+2",
+                    "Assigned Valid Resource Combination",
+                    "Alliance","Team","Days Old","Nation Drill Link","Activity"
+                ]
+
+                st.markdown("##### Assign Wartime Recommended Resources (Aligned)")
+                st.dataframe(adj_war_df[cols], use_container_width=True)
+
+                # Copy to clipboard
+                adj_csv = adj_war_df.to_csv(index=False)
                 components.html(
-                    f"""
-                    <textarea id="war-adj-data" style="display:none;">{war_csv_adj}</textarea>
-                    <button
-                      onclick="navigator.clipboard.writeText(document.getElementById('war-adj-data').value)"
-                      style="margin-top:10px; padding:4px 8px;"
-                    >
+                    f'''
+                    <textarea id="adj-war-data" style="display:none;">{adj_csv}</textarea>
+                    <button onclick="navigator.clipboard.writeText(document.getElementById('adj-war-data').value)"
+                      style="margin-top:10px; padding:4px 8px;">
                       Copy Adjusted Wartime Table to Clipboard
                     </button>
-                    """,
+                    ''',
                     height=60,
                 )
 
         # ——— Download everything as a single XLSX (with auto‑fit columns) ———
-        if 'rec_df' in locals() and 'war_df' in locals() and 'war_df_adj' in locals():
+        if 'rec_df' in locals() and 'war_df' in locals() and 'adj_war_df' in locals():
             buffer = io.BytesIO()
             # use xlsxwriter so we can set column widths
             with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                 rec_df.to_excel(writer, sheet_name="Peacetime", index=False)
                 war_df.to_excel(writer, sheet_name="Wartime",    index=False)
-                war_df_adj.to_excel(writer, sheet_name="Wartime (Adjusted)",    index=False)
+                adj_war_df.to_excel(writer, sheet_name="Wartime (Adjusted)",    index=False)
                 workbook    = writer.book
                 peac_sheet  = writer.sheets["Peacetime"]
                 war_sheet   = writer.sheets["Wartime"]
-                war_adj_sheet   = writer.sheets["Wartime (Adjusted)"]
+                adj_war_sheet   = writer.sheets["Wartime (Adjusted)"]
 
                 # auto‑fit Peacetime columns
                 for idx, col in enumerate(rec_df.columns):
@@ -1225,12 +1249,12 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     war_sheet.set_column(idx, idx, max_len)
 
                 # auto‑fit Wartime (Adjusted) columns
-                for idx, col in enumerate(war_df_adj.columns):
+                for idx, col in enumerate(adj_war_df.columns):
                     max_len = max(
-                        war_df_adj[col].astype(str).map(len).max(),
+                        adj_war_df[col].astype(str).map(len).max(),
                         len(col)
                     ) + 2
-                    war_adj_sheet.set_column(idx, idx, max_len)
+                    adj_war_sheet.set_column(idx, idx, max_len)
 
             buffer.seek(0)
 
