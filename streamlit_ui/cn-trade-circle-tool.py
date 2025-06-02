@@ -339,22 +339,18 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
             # — Inputs —
             trade_input  = st.text_area("Trade Circles (one Ruler Name per line)", height=200)
             filter_input = st.text_area("Filter Out Players (one per line)", height=100)
-
-            # — Parse into blocks of names; blank lines split circles,
-            #   but if there are NO blank lines and >6 names, chunk into 6s —
+    
+            # Parse trade_input into `tc_df` as before
             lines = [ln.strip() for ln in trade_input.splitlines() if ln.strip()]
-            # detect “single‐block” long list
             if trade_input.strip() and "\n\n" not in trade_input and len(lines) > 6:
-                # break into consecutive groups of 6
                 blocks = [ lines[i:i+6] for i in range(0, len(lines), 6) ]
             else:
-                # use blank‐line separators
                 raw_blocks = trade_input.split("\n\n")
                 blocks = [
                     [ln.strip() for ln in blk.splitlines() if ln.strip()]
                     for blk in raw_blocks
                 ]
-            
+    
             records = []
             for i, names in enumerate(blocks):
                 for name in names:
@@ -363,16 +359,26 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         "Ruler Name":   name,
                         "merge_key":    name.lower()
                     })
-            
+    
             tc_df = pd.DataFrame(records, columns=["Trade Circle","Ruler Name","merge_key"])
-
-            # — if user left it blank, use the 'details' table to auto-build circles of 6 —
+    
+            # Build the same filter_set you already intended
+            filter_set = {ln.strip().lower() for ln in filter_input.splitlines() if ln.strip()}
+    
+            # Apply that filter_set to `details` *before* we ever do pm_unmatched
+            #     so that no filtered‐out Ruler Name can slip into “unmatched” later.
+            details = details[
+                ~details["Ruler Name"].str.lower().isin(filter_set)
+            ].reset_index(drop=True).copy()
+    
+            # — if user left trade_input BLANK, fallback to auto‐build circles of 6 —
             if tc_df.empty:
                 st.info("No manual Trade Circles provided; defaulting to all alliance members (including Pending) in groups of 6.")
+    
                 # start from latest_snapshot so Pending shows up
                 tmp = latest_snapshot.copy()
                 tmp["Resource 1+2"]    = tmp.apply(get_resource_1_2, axis=1)
-                tmp["Created"]         = pd.to_datetime(tmp["Created"], errors="coerce")
+                tmp["Created"]         = pd.to_datetime(tmp["Created"], errors='coerce')
                 tmp["Days Old"]        = (pd.Timestamp.now() - tmp["Created"]).dt.days
                 tmp["Nation Drill Link"]= (
                     "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
@@ -381,35 +387,42 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                 # map in the same Activity metric
                 tmp["Activity"] = tmp["Ruler Name"] \
                     .map(avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"])
-                # filter to this alliance, team & under‐14‑day activity
+    
+                # filter to this alliance, team & under-14-day activity
                 tmp = tmp[
                     (tmp["Alliance"] == selected_alliance) &
                     (tmp["Team"]     == majority_team) &
                     (tmp["Activity"] < 14)
                 ].reset_index(drop=True)
-            
+    
+                # Also remove any “filter_input” names from tmp BEFORE forming circles
+                tmp = tmp[
+                    ~tmp["Ruler Name"].str.lower().isin(filter_set)
+                ].reset_index(drop=True).copy()
+    
                 # assign circles of 6
                 tmp["Trade Circle"] = (tmp.index // 6) + 1
-            
+    
                 # carry through Alliance Status for swap logic
                 tc_df = tmp[[
                     "Trade Circle","Ruler Name","Resource 1+2",
                     "Alliance","Team","Days Old","Nation Drill Link",
                     "Activity","Alliance Status"
                 ]]
-
+    
             # — if after fallback it’s still empty, warn and bail —
             if tc_df.empty:
                 st.warning("No Trade Circles could be formed.")
             else:
                 # — Prepare snapshot with same merge_key & combined resources —
                 if "merge_key" not in tc_df.columns:
-                    # fallback path already has full columns
+                    # fallback path already has full columns, AND we already applied filter to tmp
                     tc_df = tc_df.copy()
                 else:
                     snap = latest_snapshot.copy()
                     snap["merge_key"]    = snap["Ruler Name"].str.lower()
                     snap["Resource 1+2"] = snap.apply(get_resource_1_2, axis=1)
+    
                     tc_df = tc_df.merge(
                         snap[[
                             "merge_key",
@@ -423,8 +436,8 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                         on="merge_key",
                         how="inner"
                     )
-                    tc_df["Created"] = pd.to_datetime(tc_df["Created"], errors="coerce")
-                    tc_df["Days Old"]= (pd.Timestamp.now() - tc_df["Created"]).dt.days
+                    tc_df["Created"]  = pd.to_datetime(tc_df["Created"], errors='coerce')
+                    tc_df["Days Old"] = (pd.Timestamp.now() - tc_df["Created"]).dt.days
                     tc_df["Nation Drill Link"] = (
                         "https://www.cybernations.net/nation_drill_display.asp?Nation_ID="
                         + tc_df["Nation ID"].astype(str)
@@ -432,19 +445,19 @@ Aluminum, Coal, Gold, Iron, Lead, Lumber, Marble, Oil, Pigs, Rubber, Uranium, Wa
                     tc_df["Activity"] = tc_df["Ruler Name"].map(
                         avg_activity.set_index("Ruler Name")["All Time Average Days of Inactivity"]
                     )
-                    # filter & drop merge_key if we had it
-                    if "merge_key" in tc_df.columns:
-                        filter_set = {ln.strip().lower() for ln in filter_input.splitlines() if ln.strip()}
-                        tc_df = (
-                            tc_df[
-                                (tc_df["Activity"] < 14) &
-                                (tc_df["Alliance"] == selected_alliance) &
-                                (tc_df["Team"]     == majority_team) &
-                                (~tc_df["merge_key"].isin(filter_set))
-                            ]
-                            .drop(columns="merge_key")
-                            .reset_index(drop=True)
-                        )
+    
+                    # Re-apply the filter here, exactly as before, so that any manually-typed
+                    #     name you listed under “Filter Out Players” definitely does not appear:
+                    tc_df = (
+                        tc_df[
+                            (tc_df["Activity"] < 14) &
+                            (tc_df["Alliance"] == selected_alliance) &
+                            (tc_df["Team"]     == majority_team) &
+                            (~tc_df["merge_key"].isin(filter_set))    # ← filter_input used again
+                        ]
+                        .drop(columns="merge_key")
+                        .reset_index(drop=True)
+                    )
 
                 # — Processed Trade Circles —
                 st.markdown("#### Processed Trade Circles")
